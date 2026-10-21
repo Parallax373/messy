@@ -58,14 +58,23 @@ export async function checkForUpdates(): Promise<void> {
 }
 
 export function installUpdate(): void {
+	if (!app.isPackaged) {
+		return;
+	}
+
 	autoUpdater.quitAndInstall(true, true);
 }
 
 export function setupUpdater(changed: () => void): void {
 	onChange = changed;
 
-	// W trybie deweloperskim (npm start) nie ma czego aktualizować.
+	// W trybie deweloperskim (npm start) nie ma czego aktualizować. MESSY_FAKE_UPDATE=1.2.3 udaje
+	// pobraną aktualizację, żeby dało się obejrzeć znacznik w aplikacji bez wydawania wersji.
 	if (!app.isPackaged) {
+		if (process.env.MESSY_FAKE_UPDATE) {
+			setStatus({state: 'ready', version: process.env.MESSY_FAKE_UPDATE});
+		}
+
 		return;
 	}
 

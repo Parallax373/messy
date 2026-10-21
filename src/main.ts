@@ -65,6 +65,26 @@ function setSetting(key: keyof Settings, value: boolean): void {
 }
 
 ipcMain.handle('get-settings', () => settings);
+
+// Gotowa aktualizacja: strona pokazuje wtedy przycisk „Zaktualizuj” w nagłówku „Czaty”.
+function readyUpdateVersion(): string | null {
+	const status = getUpdateStatus();
+	return status.state === 'ready' ? status.version : null;
+}
+
+function updateStatusChanged(): void {
+	buildTrayMenu();
+	const version = readyUpdateVersion();
+	win?.webContents.send('update-ready', version);
+	tray?.setToolTip(version ? `Messy: dostępna aktualizacja ${version}` : 'Messy');
+}
+
+ipcMain.handle('get-update-ready', () => readyUpdateVersion());
+ipcMain.on('install-update', () => {
+	if (readyUpdateVersion()) {
+		installUpdate();
+	}
+});
 ipcMain.handle('set-setting', (_event, key: keyof Settings, value: boolean) => {
 	if (key in settings) {
 		setSetting(key, value === true);
@@ -327,7 +347,7 @@ app.whenReady().then(() => {
 	tray.setToolTip('Messy');
 	tray.on('click', toggleWindow);
 	buildTrayMenu();
-	setupUpdater(buildTrayMenu);
+	setupUpdater(updateStatusChanged);
 
 	// Wpis w rejestrze powstaje dopiero, gdy Windows zobaczy ikonę, więc przy pierwszym uruchomieniu ponawiamy.
 	promoteTrayIcon();

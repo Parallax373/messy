@@ -124,6 +124,53 @@
 	setInterval(reportUnread, 2000);
 	reportUnread();
 
+	// Zielony przycisk „Zaktualizuj” przed pozostałymi, widoczny tylko gdy aktualizacja jest pobrana.
+	const UPDATE_ID = 'messy-update-button';
+	const DOWNLOAD = 'M10 2.5a.75.75 0 0 1 .75.75v8.69l2.72-2.72a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-1.06 0l-4-4a.75.75 0 1 1 1.06-1.06l2.72 2.72V3.25A.75.75 0 0 1 10 2.5zM3.75 16a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H3.75z';
+	let updateVersion = null;
+
+	function ensureUpdateButton() {
+		const existing = document.getElementById(UPDATE_ID);
+		if (!updateVersion) {
+			existing?.closest('.messy-cell')?.remove();
+			return;
+		}
+
+		const first = document.getElementById(BUTTONS[0].id)?.closest('.messy-cell');
+		if (existing || !first) {
+			return;
+		}
+
+		const clone = first.cloneNode(true);
+		const button = clone.querySelector('[role="button"]') ?? clone;
+		button.id = UPDATE_ID;
+		button.setAttribute('aria-label', `Zaktualizuj do ${updateVersion}`);
+		button.title = `Zaktualizuj do ${updateVersion} (uruchomi ponownie Messy)`;
+		button.style.opacity = '';
+		button.style.color = '#31A24C';
+		button.querySelector('svg').style.setProperty('--x-color', '#31A24C');
+		button.querySelector('path').setAttribute('d', DOWNLOAD);
+		button.addEventListener('click', event => {
+			event.preventDefault();
+			event.stopPropagation();
+			window.messy.installUpdate();
+		});
+		first.before(clone);
+	}
+
+	window.messy.onUpdateReady(version => {
+		updateVersion = version;
+		document.getElementById(UPDATE_ID)?.closest('.messy-cell')?.remove();
+		ensureUpdateButton();
+	});
+
+	window.messy.getUpdateReady().then(version => {
+		updateVersion = version;
+		ensureUpdateButton();
+	});
+
+	new MutationObserver(ensureUpdateButton).observe(document.body, {childList: true, subtree: true});
+
 	window.messy.onSettingsChange(apply);
 
 	window.messy.getSettings().then(value => {

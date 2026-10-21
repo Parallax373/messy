@@ -29,8 +29,8 @@ i Electron startuje wtedy jako zwykły Node.
   `npm run release -- major` dużą zmianę. Skrypt podbija wersję (commit + tag `v…`), buduje i publikuje wydanie
   na GitHubie (Parallax373/messy). Token bierze z `gh auth token`.
 - Zainstalowany Messy sprawdza wydania przy starcie i co 4 godziny, pobiera je w tle i proponuje restart
-  w menu ikony. Repo jest prywatne, więc do aktualizacji potrzebny jest zalogowany GitHub CLI (`gh auth login`)
-  albo zmienna `GH_TOKEN`.
+  w menu ikony, a w nagłówku „Czaty” pojawia się zielony przycisk „Zaktualizuj”. Repo jest prywatne, więc do aktualizacji potrzebny jest zalogowany GitHub CLI (`gh auth login`)
+  albo zmienna `GH_TOKEN`. Przycisk można podejrzeć bez wydawania: `$env:MESSY_FAKE_UPDATE="9.9.9"; npm start`.
 
 Gdy pierwszy build zgłasza „Cannot create symbolic link” przy winCodeSign, rozpakuj archiwum ręcznie:
 `7za x <cache>\winCodeSign\<numer>.7z -o<cache>\winCodeSign\winCodeSign-2.6.0`
