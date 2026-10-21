@@ -1,0 +1,55 @@
+{
+	"name": "messy",
+	"productName": "Messy",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Messenger w zasobniku systemowym",
+	"author": "Parallax373",
+	"repository": "github:Parallax373/messy",
+	"main": "dist/main.js",
+	"scripts": {
+		"icons": "electron scripts/render-icons.js",
+		"build": "tsc",
+		"start": "tsc && electron .",
+		"debug": "tsc && electron . --remote-debugging-port=9223",
+		"dist": "tsc && electron-builder --win --publish never",
+		"release": "node scripts/release.js"
+	},
+	"build": {
+		"appId": "pl.messy.app",
+		"productName": "Messy",
+		"files": [
+			"dist/**",
+			"assets/**",
+			"page/**",
+			"package.json"
+		],
+		"directories": {
+			"output": "release"
+		},
+		"win": {
+			"target": "nsis",
+			"icon": "assets/icon.png"
+		},
+		"nsis": {
+			"oneClick": true,
+			"perMachine": false,
+			"artifactName": "Messy-Setup-${version}.${ext}"
+		},
+		"publish": {
+			"provider": "github",
+			"owner": "Parallax373",
+			"repo": "messy",
+			"private": true,
+			"releaseType": "release"
+		}
+	},
+	"devDependencies": {
+		"electron": "33.4.11",
+		"electron-builder": "25.1.8",
+		"typescript": "5.6.3"
+	},
+	"dependencies": {
+		"electron-updater": "6.3.9"
+	}
+}
