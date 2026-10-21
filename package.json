@@ -24,6 +24,10 @@
 			"page/**",
 			"package.json"
 		],
+		"electronLanguages": [
+			"pl",
+			"en-US"
+		],
 		"directories": {
 			"output": "release"
 		},
