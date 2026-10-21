@@ -99,22 +99,13 @@
 		}
 	}
 
-	// Liczba w tytule („(3) Messenger | Facebook”) to suma nieprzeczytanych wiadomości i powiadomień
-	// Facebooka (dzwonek). Odejmujemy dzwonek, którego licznik jest jedyną etykietą z liczbą w ukrytym pasku.
+	// Liczymy nieprzeczytane rozmowy na liście czatów: Facebook pogrubia ich nazwę i podgląd (600+,
+	// przeczytane mają 500/400). Liczba w tytule strony się nie nadaje, bo obejmuje powiadomienia
+	// Facebooka (dzwonek) i nie zawsze nadąża za wiadomościami.
 	let lastUnread = -1;
 	function reportUnread() {
-		const title = /^\((\d+)\)/.exec(document.title);
-		const total = title ? Number(title[1]) : 0;
-		let notifications = 0;
-		for (const element of document.querySelectorAll('[role="banner"] [aria-label]')) {
-			const match = /\d+/.exec(element.getAttribute('aria-label'));
-			if (match) {
-				notifications = Number(match[0]);
-				break;
-			}
-		}
-
-		const unread = Math.max(0, total - notifications);
+		const rows = [...document.querySelectorAll('[role="row"]')].filter(row => row.querySelector('a[href*="/t/"]'));
+		const unread = rows.filter(row => [...row.querySelectorAll('span')].some(span => Number(getComputedStyle(span).fontWeight) >= 600)).length;
 		if (unread !== lastUnread) {
 			lastUnread = unread;
 			window.messy.setUnread(unread);
