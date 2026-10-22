@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Messy</title>
+	<meta name="description" content="Messenger in your Windows tray. Unofficial, free and open source.">
+	<link rel="icon" href="favicon.png">
+	<style>
+		:root { --bg: #0d1220; --card: #151c2e; --text: #e8ebf2; --muted: #9aa3b5; --accent: #1a8cff; }
+		* { box-sizing: border-box; }
+		body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.55 'Segoe UI', system-ui, sans-serif; }
+		main { max-width: 980px; margin: 0 auto; padding: 32px 16px 48px; }
+		header { display: flex; align-items: center; gap: 14px; }
+		header img { width: 56px; height: 56px; }
+		header h1 { margin: 0; font-size: 34px; }
+		.lang { margin-left: auto; display: flex; gap: 4px; }
+		.lang button { background: none; border: 1px solid #2b3550; color: var(--muted); border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 14px; cursor: pointer; }
+		.lang button[aria-pressed="true"] { color: var(--text); border-color: var(--accent); }
+		.lead { font-size: 21px; color: var(--muted); margin: 18px 0 24px; max-width: 46em; }
+		.download { display: inline-block; background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; padding: 13px 26px; border-radius: 10px; font-size: 18px; }
+		.download:hover { filter: brightness(1.1); }
+		.small { color: var(--muted); font-size: 14px; margin-top: 10px; }
+		.shot { width: 100%; height: auto; border-radius: 14px; margin: 32px 0; display: block; box-shadow: 0 20px 60px rgba(0,0,0,.45); }
+		ul.features { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+		ul.features li { background: var(--card); border-radius: 12px; padding: 16px 18px; }
+		ul.features b { display: block; margin-bottom: 4px; }
+		h2 { margin-top: 40px; }
+		footer { color: var(--muted); font-size: 14px; margin-top: 48px; border-top: 1px solid #222b40; padding-top: 18px; }
+		a { color: #6cb4ff; }
+		/* Ukrywa drugi język; !important, bo inaczej np. ul.features { display: grid } wygrywa specyficznością. */
+		html:not([lang="en"]) [data-lang="en"], html:not([lang="pl"]) [data-lang="pl"] { display: none !important; }
+	</style>
+</head>
+<body>
+<main>
+	<header>
+		<img src="favicon.png" alt="">
+		<h1>Messy</h1>
+		<div class="lang" role="group" aria-label="Language">
+			<button type="button" data-set-lang="en">EN</button>
+			<button type="button" data-set-lang="pl">PL</button>
+		</div>
+	</header>
+
+	<p class="lead" data-lang="en">Meta shut down the Messenger desktop app and messenger.com. Messy brings Messenger back to the desktop: a click on the tray icon opens a compact chat panel right above the taskbar.</p>
+	<p class="lead" data-lang="pl">Meta zamknęła aplikację Messenger na komputer i stronę messenger.com. Messy przywraca Messengera na pulpit: kliknięcie ikony w zasobniku otwiera kompaktowy panel czatu tuż nad paskiem zadań.</p>
+
+	<a class="download" href="https://github.com/Parallax373/messy-releases/releases/latest">
+		<span data-lang="en">Download for Windows</span><span data-lang="pl">Pobierz na Windows</span>
+	</a>
+	<p class="small" data-lang="en">Windows 10 and 11 · free · no admin rights needed. If SmartScreen warns you, click <i>More info → Run anyway</i>.</p>
+	<p class="small" data-lang="pl">Windows 10 i 11 · za darmo · bez uprawnień administratora. Gdy SmartScreen ostrzeże, kliknij <i>Więcej informacji → Uruchom mimo to</i>.</p>
+
+	<img class="shot" src="preview.png" width="1200" height="760" alt="Messy chat panel above the Windows taskbar">
+
+	<ul class="features" data-lang="en">
+		<li><b>Lives in the tray</b>Pinned to the taskbar like Steam. Click to open, click away to hide.</li>
+		<li><b>Only real messages</b>The icon turns red for unread chats, not for Facebook likes or comments.</li>
+		<li><b>Just the chat</b>No Facebook top bar; the chat fills the whole panel.</li>
+		<li><b>OLED mode</b>True black instead of Facebook's grey dark theme.</li>
+		<li><b>One-click mute</b>Silence notifications right from the Chats header.</li>
+		<li><b>Updates itself</b>New versions download in the background; one click to install.</li>
+	</ul>
+	<ul class="features" data-lang="pl">
+		<li><b>Mieszka w zasobniku</b>Przypięty na pasku jak Steam. Klik otwiera, klik obok chowa.</li>
+		<li><b>Tylko prawdziwe wiadomości</b>Ikona robi się czerwona przy nieprzeczytanych czatach, nie przy polubieniach czy komentarzach.</li>
+		<li><b>Sam czat</b>Bez górnego paska Facebooka, czat wypełnia cały panel.</li>
+		<li><b>Tryb OLED</b>Czysta czerń zamiast szarego ciemnego motywu Facebooka.</li>
+		<li><b>Wyciszenie jednym kliknięciem</b>Prosto z nagłówka „Czaty”.</li>
+		<li><b>Sam się aktualizuje</b>Nowe wersje pobierają się w tle, instalacja jednym kliknięciem.</li>
+	</ul>
+
+	<h2 data-lang="en">Privacy</h2>
+	<h2 data-lang="pl">Prywatność</h2>
+	<p data-lang="en">Messy only shows facebook.com/messages. Your login and messages go straight to Facebook. Messy has no servers, analytics or telemetry, and the code is open: <a href="https://github.com/Parallax373/messy">github.com/Parallax373/messy</a>. <a href="https://github.com/Parallax373/messy/blob/main/PRIVACY.md">Full privacy notes</a>.</p>
+	<p data-lang="pl">Messy tylko wyświetla facebook.com/messages. Logowanie i wiadomości idą prosto do Facebooka. Messy nie ma serwerów, analityki ani telemetrii, a kod jest otwarty: <a href="https://github.com/Parallax373/messy">github.com/Parallax373/messy</a>. <a href="https://github.com/Parallax373/messy/blob/main/PRIVACY.md">Szczegóły o prywatności</a>.</p>
+
+	<footer>
+		<p data-lang="en">Messy is an unofficial app and is not affiliated with, endorsed by or connected to Meta Platforms, Inc., Facebook or Messenger. MIT License.</p>
+		<p data-lang="pl">Messy to nieoficjalna aplikacja, niepowiązana z Meta Platforms, Inc., Facebookiem ani Messengerem. Licencja MIT.</p>
+	</footer>
+</main>
+<script>
+	// Język strony: zapamiętany wybór, inaczej polski dla polskiej przeglądarki, w pozostałych przypadkach angielski.
+	const buttons = document.querySelectorAll('[data-set-lang]');
+	function setLang(lang) {
+		document.documentElement.lang = lang;
+		for (const button of buttons) {
+			button.setAttribute('aria-pressed', String(button.dataset.setLang === lang));
+		}
+	}
+
+	let saved = null;
+	try {
+		saved = localStorage.getItem('lang');
+	} catch {}
+
+	setLang(saved ?? (navigator.language.toLowerCase().startsWith('pl') ? 'pl' : 'en'));
+	for (const button of buttons) {
+		button.addEventListener('click', () => {
+			setLang(button.dataset.setLang);
+			try {
+				localStorage.setItem('lang', button.dataset.setLang);
+			} catch {}
+		});
+	}
+</script>
+</body>
+</html>

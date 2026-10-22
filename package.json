@@ -5,10 +5,12 @@
 	"private": true,
 	"description": "Messenger w zasobniku systemowym",
 	"author": "Parallax373",
+	"license": "MIT",
 	"repository": "github:Parallax373/messy",
 	"main": "dist/main.js",
 	"scripts": {
 		"icons": "electron scripts/render-icons.js",
+		"preview": "electron scripts/render-preview.js",
 		"build": "tsc",
 		"start": "tsc && electron .",
 		"debug": "tsc && electron . --remote-debugging-port=9223",
