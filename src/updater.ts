@@ -1,4 +1,3 @@
-import {execFile} from 'node:child_process';
 import {app, Notification} from 'electron';
 import {autoUpdater} from 'electron-updater';
 
@@ -23,33 +22,14 @@ function setStatus(value: UpdateStatus): void {
 	onChange();
 }
 
-// Repo jest prywatne, więc wydania pobieramy z tokenem. Bierzemy go w trakcie działania z GH_TOKEN
-// albo z zalogowanego GitHub CLI, żeby żaden token nie trafił do instalatora.
-async function githubToken(): Promise<string | undefined> {
-	if (process.env.GH_TOKEN) {
-		return process.env.GH_TOKEN;
-	}
-
-	return new Promise(resolve => {
-		execFile('gh', ['auth', 'token'], {windowsHide: true}, (error, stdout) => {
-			resolve(error ? undefined : stdout.trim() || undefined);
-		});
-	});
-}
-
 export async function checkForUpdates(): Promise<void> {
 	if (status.state === 'checking' || status.state === 'downloading' || status.state === 'ready') {
 		return;
 	}
 
 	setStatus({state: 'checking'});
-	const token = await githubToken();
-	if (!token) {
-		setStatus({state: 'error', message: 'brak tokenu GitHub (zaloguj się: gh auth login)'});
-		return;
-	}
-
-	autoUpdater.setFeedURL({provider: 'github', owner: 'Parallax373', repo: 'messy', private: true, token});
+	// Wydania leżą w publicznym repo Parallax373/messy-releases (bez kodu), więc nie trzeba tokenu.
+	// Adres bierze się z sekcji „publish” w package.json, którą electron-builder zapisuje do instalatora.
 	try {
 		await autoUpdater.checkForUpdates();
 	} catch (error) {

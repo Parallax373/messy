@@ -43,8 +43,7 @@
 		"publish": {
 			"provider": "github",
 			"owner": "Parallax373",
-			"repo": "messy",
-			"private": true,
+			"repo": "messy-releases",
 			"releaseType": "release"
 		}
 	},

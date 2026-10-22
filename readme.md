@@ -27,10 +27,11 @@ i Electron startuje wtedy jako zwykły Node.
 - `npm run dist` buduje instalator `release/Messy-Setup-<wersja>.exe` bez publikowania.
 - `npm run release` wydaje poprawkę (1.0.0 → 1.0.1), `npm run release -- minor` nową funkcję (1.0.1 → 1.1.0),
   `npm run release -- major` dużą zmianę. Skrypt podbija wersję (commit + tag `v…`), buduje i publikuje wydanie
-  na GitHubie (Parallax373/messy). Token bierze z `gh auth token`.
+  w publicznym repo [Parallax373/messy-releases](https://github.com/Parallax373/messy-releases), w którym są
+  tylko instalatory (kod zostaje w prywatnym Parallax373/messy). Do wysyłki token bierze z `gh auth token`.
 - Zainstalowany Messy sprawdza wydania przy starcie i co 4 godziny, pobiera je w tle i proponuje restart
-  w menu ikony, a w nagłówku „Czaty” pojawia się zielony przycisk „Zaktualizuj”. Repo jest prywatne, więc do aktualizacji potrzebny jest zalogowany GitHub CLI (`gh auth login`)
-  albo zmienna `GH_TOKEN`. Przycisk można podejrzeć bez wydawania: `$env:MESSY_FAKE_UPDATE="9.9.9"; npm start`.
+  w menu ikony, a w nagłówku „Czaty” pojawia się zielony przycisk „Zaktualizuj”. Aktualizacje
+  nie wymagają żadnego logowania. Przycisk można podejrzeć bez wydawania: `$env:MESSY_FAKE_UPDATE="9.9.9"; npm start`.
 
 Gdy pierwszy build zgłasza „Cannot create symbolic link” przy winCodeSign, rozpakuj archiwum ręcznie:
 `7za x <cache>\winCodeSign\<numer>.7z -o<cache>\winCodeSign\winCodeSign-2.6.0`
