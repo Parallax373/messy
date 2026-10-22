@@ -4,7 +4,7 @@
 
 <p align="center">
 Messenger in your Windows tray. / Messenger w zasobniku Windows.<br>
-<a href="https://github.com/Parallax373/messy-releases/releases/latest"><b>Download / Pobierz</b></a>
+<a href="https://github.com/Parallax373/messy/releases/latest"><b>Download / Pobierz</b></a>
 </p>
 
 ![Messy panel above the Windows tray](docs/preview.png)
@@ -26,7 +26,7 @@ the way Steam or Discord do. Click anywhere else and it hides.
 - **Polish and English**, following your Windows language
 
 **Install:** download `Messy-Setup-<version>.exe` from
-[Releases](https://github.com/Parallax373/messy-releases/releases/latest) and run it. No admin rights needed.
+[Releases](https://github.com/Parallax373/messy/releases/latest) and run it. No admin rights needed.
 Windows may show a SmartScreen warning because the installer isn't signed yet:
 click **More info → Run anyway**.
 
@@ -50,7 +50,7 @@ czy Discordzie. Kliknięcie gdzie indziej go chowa.
 - **Polski i angielski**, zależnie od języka Windowsa
 
 **Instalacja:** pobierz `Messy-Setup-<wersja>.exe` z
-[wydań](https://github.com/Parallax373/messy-releases/releases/latest) i uruchom. Nie potrzeba uprawnień
+[wydań](https://github.com/Parallax373/messy/releases/latest) i uruchom. Nie potrzeba uprawnień
 administratora. Windows może pokazać ostrzeżenie SmartScreen, bo instalator nie jest jeszcze podpisany:
 kliknij **Więcej informacji → Uruchom mimo to**.
 

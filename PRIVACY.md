@@ -10,7 +10,7 @@ Messy is a window around **facebook.com/messages**. It has no servers of its own
   profile), the panel size and your settings (mute, OLED mode). Uninstalling Messy and deleting this
   folder removes everything.
 - **Network requests Messy itself makes:** only the update check, which downloads `latest.yml` and new
-  installers from [github.com/Parallax373/messy-releases](https://github.com/Parallax373/messy-releases).
+  installers from [github.com/Parallax373/messy](https://github.com/Parallax373/messy).
   No analytics, telemetry, crash reporting or tracking of any kind.
 - **What Messy changes in the page:** it hides Facebook's top bar, adjusts colours and layout, adds the
   OLED, mute and update buttons, and counts unread chats on the chat list to colour the tray icon.
@@ -28,7 +28,7 @@ Messy to okno wokół **facebook.com/messages**. Nie ma własnych serwerów i ni
   przeglądarki), rozmiar panelu i ustawienia (wyciszenie, tryb OLED). Odinstalowanie Messy i usunięcie
   tego folderu usuwa wszystko.
 - **Połączenia, które robi sam Messy:** tylko sprawdzanie aktualizacji, czyli pobranie `latest.yml`
-  i nowych instalatorów z [github.com/Parallax373/messy-releases](https://github.com/Parallax373/messy-releases).
+  i nowych instalatorów z [github.com/Parallax373/messy](https://github.com/Parallax373/messy).
   Żadnej analityki, telemetrii, raportów błędów ani śledzenia.
 - **Co Messy zmienia na stronie:** chowa górny pasek Facebooka, poprawia kolory i układ, dodaje przyciski
   OLED, wyciszenia i aktualizacji oraz liczy nieprzeczytane czaty na liście, żeby pokolorować ikonę.

@@ -29,7 +29,7 @@ export async function checkForUpdates(): Promise<void> {
 	}
 
 	setStatus({state: 'checking'});
-	// Wydania leżą w publicznym repo Parallax373/messy-releases (bez kodu), więc nie trzeba tokenu.
+	// Wydania leżą w publicznym repo Parallax373/messy, więc nie trzeba tokenu.
 	// Adres bierze się z sekcji „publish” w package.json, którą electron-builder zapisuje do instalatora.
 	try {
 		await autoUpdater.checkForUpdates();

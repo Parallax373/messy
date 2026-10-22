@@ -32,7 +32,7 @@ bold rows for unread chats). When Facebook changes the page, these are the place
 - `npm run dist` builds `release/Messy-Setup-<version>.exe` without publishing.
 - `npm run release` ships a patch (1.0.0 → 1.0.1), `npm run release -- minor` a feature (1.0.1 → 1.1.0),
   `npm run release -- major` a big change. The script bumps the version (commit + `v…` tag), pushes, builds
-  and publishes the installer to [Parallax373/messy-releases](https://github.com/Parallax373/messy-releases).
+  and publishes the installer to the [releases](https://github.com/Parallax373/messy/releases) of this repo.
   The upload token comes from `gh auth token`.
 - Installed copies check for releases at start and every 4 hours, download them in the background, then show
   a green "Update" button in the Chats header and a restart item in the tray menu.

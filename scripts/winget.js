@@ -38,7 +38,7 @@ InstallModes:
 UpgradeBehavior: install
 Installers:
 - Architecture: x64
-  InstallerUrl: https://github.com/Parallax373/messy-releases/releases/download/v${version}/Messy-Setup-${version}.exe
+  InstallerUrl: https://github.com/Parallax373/messy/releases/download/v${version}/Messy-Setup-${version}.exe
   InstallerSha256: ${sha256}
 ManifestType: installer
 ManifestVersion: ${manifestVersion}
@@ -62,7 +62,7 @@ Tags:
 - facebook
 - messenger
 - tray
-ReleaseNotesUrl: https://github.com/Parallax373/messy-releases/releases/tag/v${version}
+ReleaseNotesUrl: https://github.com/Parallax373/messy/releases/tag/v${version}
 ManifestType: defaultLocale
 ManifestVersion: ${manifestVersion}
 `,
