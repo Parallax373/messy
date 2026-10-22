@@ -1,0 +1,39 @@
+name: Bug / Błąd
+description: Something doesn't work / Coś nie działa
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Messy depends on how facebook.com/messages looks, so Facebook changes often break things. A screenshot helps a lot,
+        but please cover names and messages. / Messy zależy od wyglądu facebook.com/messages, więc zmiany Facebooka
+        często coś psują. Zrzut ekranu bardzo pomaga, ale zasłoń na nim imiona i wiadomości.
+  - type: input
+    id: version
+    attributes:
+      label: Messy version / Wersja Messy
+      description: Right-click the tray icon, the version is at the top. / Prawy klik na ikonie, wersja jest na górze.
+      placeholder: "1.1.1"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? / Co się stało?
+      description: What did you expect, and what happened instead? / Czego się spodziewałeś, a co się stało?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps / Kroki
+      placeholder: |
+        1. Open the panel / Otwórz panel
+        2. …
+  - type: dropdown
+    id: windows
+    attributes:
+      label: Windows
+      options:
+        - Windows 11
+        - Windows 10

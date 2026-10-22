@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Download / Pobierz
+    url: https://github.com/Parallax373/messy/releases/latest
+    about: Latest installer / Najnowszy instalator
