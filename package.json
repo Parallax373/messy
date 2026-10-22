@@ -15,7 +15,9 @@
 		"start": "tsc && electron .",
 		"debug": "tsc && electron . --remote-debugging-port=9223",
 		"dist": "tsc && electron-builder --win --publish never",
-		"release": "node scripts/release.js"
+		"dist:store": "tsc && electron-builder --win appx --publish never",
+		"release": "node scripts/release.js",
+		"winget": "node scripts/winget.js"
 	},
 	"build": {
 		"appId": "pl.messy.app",
@@ -36,6 +38,17 @@
 		"win": {
 			"target": "nsis",
 			"icon": "assets/icon.png"
+		},
+		"appx": {
+			"identityName": "TODO.PartnerCenter.IdentityName",
+			"publisher": "CN=00000000-0000-0000-0000-000000000000",
+			"publisherDisplayName": "Parallax373",
+			"applicationId": "Messy",
+			"displayName": "Messy",
+			"backgroundColor": "#0062E0",
+			"languages": ["pl-PL", "en-US"],
+			"addAutoLaunchExtension": true,
+			"artifactName": "Messy-${version}.${ext}"
 		},
 		"nsis": {
 			"oneClick": true,

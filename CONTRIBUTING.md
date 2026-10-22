@@ -40,3 +40,17 @@ bold rows for unread chats). When Facebook changes the page, these are the place
 If the first build fails with "Cannot create symbolic link" in winCodeSign, extract the archive by hand:
 `7za x <cache>\winCodeSign\<number>.7z -o<cache>\winCodeSign\winCodeSign-2.6.0`
 (`<cache>` = `%LOCALAPPDATA%\electron-builder\Cache`). Errors about two `.dylib` files can be ignored.
+
+## Microsoft Store
+
+`npm run dist:store` builds `release/Messy-<version>.appx`. Before the first upload, replace the placeholder
+`identityName` and `publisher` in the `appx` section of `package.json` with the values Partner Center shows
+under *Product identity*. The Store build skips the built-in updater (the Store updates it) and its autostart
+is managed by Windows (Settings → Apps → Startup).
+
+## winget
+
+After a release, `npm run winget` writes manifests for the current version to `winget/manifests/…`
+(git-ignored) with the installer URL and SHA256. Check them with `winget validate --manifest <dir>` and
+submit them as a pull request to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs),
+for example with `wingetcreate submit <dir>`.

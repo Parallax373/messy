@@ -59,6 +59,11 @@ export function setupUpdater(changed: () => void): void {
 		return;
 	}
 
+	// Wersję z Microsoft Store aktualizuje Sklep.
+	if (process.windowsStore) {
+		return;
+	}
+
 	autoUpdater.autoDownload = true;
 	autoUpdater.autoInstallOnAppQuit = true;
 	autoUpdater.on('update-available', info => {

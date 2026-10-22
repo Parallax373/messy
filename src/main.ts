@@ -24,6 +24,8 @@ const MESSENGER_URL = 'https://www.facebook.com/messages/';
 const MIN_WIDTH = 320;
 const MIN_HEIGHT = 400;
 const MARGIN = 8;
+// Wersja z Microsoft Store: aktualizuje ją Sklep, a autostartem zarządza Windows (Ustawienia → Aplikacje → Uruchamianie).
+const storeBuild = process.windowsStore === true;
 
 // Rozmiar panelu zapamiętany między uruchomieniami.
 const sizeFile = path.join(app.getPath('userData'), 'window-size.json');
@@ -133,12 +135,12 @@ function updateMenuItem(): Electron.MenuItemConstructorOptions {
 function buildTrayMenu(): void {
 	tray?.setContextMenu(Menu.buildFromTemplate([
 		{label: `Messy ${app.getVersion()}`, enabled: false},
-		updateMenuItem(),
+		...(storeBuild ? [] : [updateMenuItem()]),
 		{type: 'separator'},
 		{label: t().show, click: showWindow},
 		{label: t().mute, type: 'checkbox', checked: settings.muted, click: item => setSetting('muted', item.checked)},
 		{label: t().oled, type: 'checkbox', checked: settings.oled, click: item => setSetting('oled', item.checked)},
-		{label: t().autostart, type: 'checkbox', checked: isAutostart(), enabled: app.isPackaged, click: item => setAutostart(item.checked)},
+		...(storeBuild ? [] : [{label: t().autostart, type: 'checkbox' as const, checked: isAutostart(), enabled: app.isPackaged, click: (item: Electron.MenuItem) => setAutostart(item.checked)}]),
 		{label: t().devTools, click: () => win?.webContents.openDevTools({mode: 'detach'})},
 		{type: 'separator'},
 		{label: t().quit, click: () => app.quit()},
@@ -356,7 +358,7 @@ app.whenReady().then(() => {
 	});
 	messengerSession.setPermissionCheckHandler((_webContents, permission) => permission !== 'notifications' || !settings.muted);
 
-	if (firstRun && app.isPackaged) {
+	if (firstRun && app.isPackaged && !storeBuild) {
 		app.setLoginItemSettings({openAtLogin: true});
 		fs.writeFileSync(settingsFile, JSON.stringify(settings));
 	}
