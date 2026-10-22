@@ -1,5 +1,6 @@
 import {app, Notification} from 'electron';
 import {autoUpdater} from 'electron-updater';
+import {t} from './i18n';
 
 const CHECK_INTERVAL = 4 * 60 * 60 * 1000;
 
@@ -68,7 +69,7 @@ export function setupUpdater(changed: () => void): void {
 	});
 	autoUpdater.on('update-downloaded', info => {
 		setStatus({state: 'ready', version: info.version});
-		new Notification({title: 'Messy', body: `Wersja ${info.version} jest gotowa. Uruchom ponownie z menu ikony, żeby ją zainstalować.`}).show();
+		new Notification({title: 'Messy', body: t().updateReadyNotification(info.version)}).show();
 	});
 	autoUpdater.on('error', error => {
 		setStatus({state: 'error', message: error.message.split('\n')[0]});

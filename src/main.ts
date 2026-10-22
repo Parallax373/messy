@@ -18,6 +18,7 @@ import {
 	installUpdate,
 	setupUpdater,
 } from './updater';
+import {t} from './i18n';
 
 const MESSENGER_URL = 'https://www.facebook.com/messages/';
 const MIN_WIDTH = 320;
@@ -51,6 +52,7 @@ function saveSize(): void {
 type Settings = {muted: boolean; oled: boolean};
 const settingsFile = path.join(app.getPath('userData'), 'settings.json');
 const settings: Settings = {muted: false, oled: false};
+const firstRun = !fs.existsSync(settingsFile);
 try {
 	const saved = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
 	settings.muted = saved.muted === true;
@@ -66,6 +68,17 @@ function setSetting(key: keyof Settings, value: boolean): void {
 
 ipcMain.handle('get-settings', () => settings);
 
+// Uruchamianie z Windowsem. Przy pierwszym starcie zainstalowanej aplikacji włączamy je domyślnie,
+// bo Messy żyje w zasobniku i bez tego po restarcie komputera po prostu go nie ma.
+function isAutostart(): boolean {
+	return app.getLoginItemSettings().openAtLogin;
+}
+
+function setAutostart(enabled: boolean): void {
+	app.setLoginItemSettings({openAtLogin: enabled});
+	buildTrayMenu();
+}
+
 // Gotowa aktualizacja: strona pokazuje wtedy przycisk „Zaktualizuj” w nagłówku „Czaty”.
 function readyUpdateVersion(): string | null {
 	const status = getUpdateStatus();
@@ -76,10 +89,11 @@ function updateStatusChanged(): void {
 	buildTrayMenu();
 	const version = readyUpdateVersion();
 	win?.webContents.send('update-ready', version);
-	tray?.setToolTip(version ? `Messy: dostępna aktualizacja ${version}` : 'Messy');
+	tray?.setToolTip(version ? t().tooltipUpdate(version) : t().tooltip);
 }
 
 ipcMain.handle('get-update-ready', () => readyUpdateVersion());
+ipcMain.handle('get-page-strings', () => t().page);
 ipcMain.on('install-update', () => {
 	if (readyUpdateVersion()) {
 		installUpdate();
@@ -95,23 +109,23 @@ function updateMenuItem(): Electron.MenuItemConstructorOptions {
 	const status = getUpdateStatus();
 	switch (status.state) {
 		case 'checking': {
-			return {label: 'Sprawdzanie aktualizacji…', enabled: false};
+			return {label: t().checking, enabled: false};
 		}
 
 		case 'downloading': {
-			return {label: `Pobieranie wersji ${status.version}…`, enabled: false};
+			return {label: t().downloading(status.version), enabled: false};
 		}
 
 		case 'ready': {
-			return {label: `Uruchom ponownie i zaktualizuj do ${status.version}`, click: installUpdate};
+			return {label: t().restartToUpdate(status.version), click: installUpdate};
 		}
 
 		case 'error': {
-			return {label: `Sprawdź aktualizacje (błąd: ${status.message})`, click: checkForUpdates, enabled: app.isPackaged};
+			return {label: t().checkUpdatesError(status.message), click: checkForUpdates, enabled: app.isPackaged};
 		}
 
 		default: {
-			return {label: 'Sprawdź aktualizacje', click: checkForUpdates, enabled: app.isPackaged};
+			return {label: t().checkUpdates, click: checkForUpdates, enabled: app.isPackaged};
 		}
 	}
 }
@@ -121,12 +135,13 @@ function buildTrayMenu(): void {
 		{label: `Messy ${app.getVersion()}`, enabled: false},
 		updateMenuItem(),
 		{type: 'separator'},
-		{label: 'Pokaż', click: showWindow},
-		{label: 'Wycisz powiadomienia', type: 'checkbox', checked: settings.muted, click: item => setSetting('muted', item.checked)},
-		{label: 'Tryb OLED (czarny)', type: 'checkbox', checked: settings.oled, click: item => setSetting('oled', item.checked)},
-		{label: 'Narzędzia deweloperskie', click: () => win?.webContents.openDevTools({mode: 'detach'})},
+		{label: t().show, click: showWindow},
+		{label: t().mute, type: 'checkbox', checked: settings.muted, click: item => setSetting('muted', item.checked)},
+		{label: t().oled, type: 'checkbox', checked: settings.oled, click: item => setSetting('oled', item.checked)},
+		{label: t().autostart, type: 'checkbox', checked: isAutostart(), enabled: app.isPackaged, click: item => setAutostart(item.checked)},
+		{label: t().devTools, click: () => win?.webContents.openDevTools({mode: 'detach'})},
 		{type: 'separator'},
-		{label: 'Zakończ', click: () => app.quit()},
+		{label: t().quit, click: () => app.quit()},
 	]));
 }
 
@@ -225,7 +240,7 @@ function toggleWindow(): void {
 
 function setUnread(count: number): void {
 	tray?.setImage(count > 0 ? icons.unread : icons.normal);
-	tray?.setToolTip(count > 0 ? `Messy: ${count} nieprzeczytane` : 'Messy');
+	tray?.setToolTip(count > 0 ? t().tooltipUnread(count) : t().tooltip);
 }
 
 function createWindow(): BrowserWindow {
@@ -341,10 +356,15 @@ app.whenReady().then(() => {
 	});
 	messengerSession.setPermissionCheckHandler((_webContents, permission) => permission !== 'notifications' || !settings.muted);
 
+	if (firstRun && app.isPackaged) {
+		app.setLoginItemSettings({openAtLogin: true});
+		fs.writeFileSync(settingsFile, JSON.stringify(settings));
+	}
+
 	win = createWindow();
 
 	tray = new Tray(icons.normal);
-	tray.setToolTip('Messy');
+	tray.setToolTip(t().tooltip);
 	tray.on('click', toggleWindow);
 	buildTrayMenu();
 	setupUpdater(updateStatusChanged);

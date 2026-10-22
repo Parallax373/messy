@@ -6,6 +6,8 @@ type Settings = {muted: boolean; oled: boolean};
 contextBridge.exposeInMainWorld('messy', {
 	getSettings: async (): Promise<Settings> => ipcRenderer.invoke('get-settings'),
 	setSetting: async (key: keyof Settings, value: boolean): Promise<void> => ipcRenderer.invoke('set-setting', key, value),
+	// Teksty przycisków w języku Windowsa (src/i18n.ts).
+	getStrings: async (): Promise<Record<string, string>> => ipcRenderer.invoke('get-page-strings'),
 	// Wersja gotowej do instalacji aktualizacji albo null, gdy jej nie ma.
 	getUpdateReady: async (): Promise<string | null> => ipcRenderer.invoke('get-update-ready'),
 	onUpdateReady(callback: (version: string | null) => void): void {

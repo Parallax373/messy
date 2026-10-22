@@ -16,20 +16,22 @@
 		{
 			id: 'messy-oled-button',
 			key: 'oled',
-			label: on => on ? 'Wyłącz tryb OLED' : 'Włącz tryb OLED',
+			label: on => on ? strings.oledOn : strings.oledOff,
 			icon: () => MOON,
 			dimmed: on => !on,
 		},
 		{
 			id: 'messy-mute-button',
 			key: 'muted',
-			label: on => on ? 'Włącz powiadomienia' : 'Wycisz powiadomienia',
+			label: on => on ? strings.muteOn : strings.muteOff,
 			icon: on => on ? BELL_OFF : BELL,
 			dimmed: on => on,
 		},
 	];
 
 	let settings = {muted: false, oled: false};
+	// Teksty w języku Windowsa z src/i18n.ts; dopóki nie dotrą, przycisków nie wstawiamy.
+	let strings = null;
 
 	// Facebook może pamiętać zgodę na powiadomienia sprzed wyciszenia, więc podczas wyciszenia
 	// zamiast systemowego dymka zwracamy atrapę z tym samym interfejsem.
@@ -66,6 +68,10 @@
 	}
 
 	function ensureButtons() {
+		if (!strings) {
+			return;
+		}
+
 		// „…” ma stały identyfikator menu niezależny od języka interfejsu.
 		const menuButton = document.querySelector('[aria-controls="mw-inbox-settings-menu"]');
 		if (!menuButton || BUTTONS.every(spec => document.getElementById(spec.id))) {
@@ -122,7 +128,7 @@
 
 	function ensureUpdateButton() {
 		const existing = document.getElementById(UPDATE_ID);
-		if (!updateVersion) {
+		if (!updateVersion || !strings) {
 			existing?.closest('.messy-cell')?.remove();
 			return;
 		}
@@ -135,8 +141,8 @@
 		const clone = first.cloneNode(true);
 		const button = clone.querySelector('[role="button"]') ?? clone;
 		button.id = UPDATE_ID;
-		button.setAttribute('aria-label', `Zaktualizuj do ${updateVersion}`);
-		button.title = `Zaktualizuj do ${updateVersion} (uruchomi ponownie Messy)`;
+		button.setAttribute('aria-label', strings.update.replace('{version}', updateVersion));
+		button.title = strings.updateHint.replace('{version}', updateVersion);
 		button.style.opacity = '';
 		button.style.color = '#31A24C';
 		button.querySelector('svg').style.setProperty('--x-color', '#31A24C');
@@ -164,9 +170,11 @@
 
 	window.messy.onSettingsChange(apply);
 
-	window.messy.getSettings().then(value => {
+	Promise.all([window.messy.getSettings(), window.messy.getStrings()]).then(([value, texts]) => {
+		strings = texts;
 		apply(value);
 		ensureButtons();
+		ensureUpdateButton();
 	});
 
 	// Facebook przebudowuje nagłówek przy nawigacji, więc przyciski dokładamy ponownie, gdy znikną.
