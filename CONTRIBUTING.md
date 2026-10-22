@@ -1,52 +1,52 @@
 # Development
 
+Messy is a [Tauri 2](https://tauri.app) app: a small Rust program around a WebView2 window that loads
+facebook.com/messages.
+
 ## Run
+
+Needs Node.js and Rust (`rustup`, MSVC toolchain).
 
 ```sh
 npm install
 npm start
 ```
 
-`npm run debug` starts with the DevTools port 9223, handy for inspecting the live page.
-
-In the VS Code terminal run `Remove-Item Env:ELECTRON_RUN_AS_NODE` first: VS Code sets this variable
-and Electron then starts as plain Node.
+`npm run debug` starts with the WebView2 DevTools port 9223 (open `edge://inspect`), handy for inspecting
+the live page. The tray menu also has a "Developer tools" item.
 
 Preview the update button without publishing a release: `$env:MESSY_FAKE_UPDATE="9.9.9"; npm start`.
-Force the English UI: `npx electron . --lang=en-US`.
+Force the English UI: `$env:MESSY_LANG="en"; npm start`.
 
 ## Layout
 
-- `src/main.ts`: window, tray, settings, CSS injected into the page
-- `src/i18n.ts`: Polish and English UI strings
-- `src/updater.ts`: checking, downloading and installing updates from GitHub
-- `src/preload.ts`: bridge between the page and the main process (`window.messy`)
+- `src-tauri/src/main.rs`: window, tray, settings, page permissions, the commands the page calls
+- `src-tauri/src/i18n.rs`: Polish and English UI strings
+- `src-tauri/src/updater.rs`: checking, downloading and installing updates from GitHub
+- `src-tauri/capabilities/messenger.json`: which commands facebook.com may call
+- `page/bridge.js`: `window.messy` in the page, on top of Tauri IPC
 - `page/inject.js`: script running in the page, buttons in the Chats header, unread count, muting `Notification`
-- `assets/icon.svg`, `assets/icon-unread.svg`: icon sources; `npm run icons` renders the PNGs
+- `page/style.css`: CSS injected into the page (hidden top bar, scrollbars, OLED mode)
+- `assets/icon.svg`, `assets/icon-unread.svg`: icon sources; `npm run icons` renders the PNGs and
+  `src-tauri/icons`
+
+The three `page/` files are compiled into the exe and injected before Facebook's own scripts on every page load.
 
 Messy depends on how facebook.com/messages is built (CSS variables, `aria-controls="mw-inbox-settings-menu"`,
 bold rows for unread chats). When Facebook changes the page, these are the places to look first.
 
 ## Build and release
 
-- `npm run dist` builds `release/Messy-Setup-<version>.exe` without publishing.
+- `npm run dist` builds `src-tauri/target/release/bundle/nsis/Messy_<version>_x64-setup.exe` without publishing.
 - `npm run release` ships a patch (1.0.0 → 1.0.1), `npm run release -- minor` a feature (1.0.1 → 1.1.0),
-  `npm run release -- major` a big change. The script bumps the version (commit + `v…` tag), pushes, builds
-  and publishes the installer to the [releases](https://github.com/Parallax373/messy/releases) of this repo.
-  The upload token comes from `gh auth token`.
+  `npm run release -- major` a big change. The script bumps the version (commit + `v…` tag), pushes, builds,
+  signs the update and publishes `Messy-Setup-<version>.exe` and `latest.json` to the
+  [releases](https://github.com/Parallax373/messy/releases) of this repo with `gh`.
+- Updates are signed with a minisign key kept outside the repo (`~/.tauri/messy.key`, or the
+  `TAURI_SIGNING_PRIVATE_KEY` variable). The public key is in `src-tauri/tauri.conf.json`. Without the
+  private key, installed copies reject new versions.
 - Installed copies check for releases at start and every 4 hours, download them in the background, then show
   a green "Update" button in the Chats header and a restart item in the tray menu.
-
-If the first build fails with "Cannot create symbolic link" in winCodeSign, extract the archive by hand:
-`7za x <cache>\winCodeSign\<number>.7z -o<cache>\winCodeSign\winCodeSign-2.6.0`
-(`<cache>` = `%LOCALAPPDATA%\electron-builder\Cache`). Errors about two `.dylib` files can be ignored.
-
-## Microsoft Store
-
-`npm run dist:store` builds `release/Messy-<version>.appx`. Before the first upload, replace the placeholder
-`identityName` and `publisher` in the `appx` section of `package.json` with the values Partner Center shows
-under *Product identity*. The Store build skips the built-in updater (the Store updates it) and its autostart
-is managed by Windows (Settings → Apps → Startup).
 
 ## winget
 

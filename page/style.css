@@ -1,0 +1,46 @@
+/* Górny pasek Facebooka (logo, wyszukiwarka, zakładki, powiadomienia) jest zbędny w samym czacie.
+   Facebook ustawia --header-height i --messenger-card-spacing także na elementach wewnątrz strony,
+   więc nadpisujemy je na każdym elemencie, żeby czat wypełniał okno bez odstępów. */
+div[role="banner"] { display: none !important; }
+* { --header-height: 0px !important; --messenger-card-spacing: 0px !important; }
+html { overflow: hidden !important; }
+/* Podgląd zdjęć centruje swój górny pasek (zamknij, pobierz) w --header-height; przy zerze wyjeżdża ponad okno. */
+[role="dialog"], [role="dialog"] * { --header-height: 56px !important; }
+
+/* Cienkie, zaokrąglone paski przewijania bez strzałek, widoczne mocniej po najechaniu. */
+::-webkit-scrollbar { width: 8px; height: 8px; background: transparent; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-button { display: none; }
+::-webkit-scrollbar-thumb {
+	background: rgba(255, 255, 255, 0.18);
+	border: 2px solid transparent;
+	border-radius: 8px;
+	background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.35); }
+html:not(.__fb-dark-mode) ::-webkit-scrollbar-thumb { background-color: rgba(0, 0, 0, 0.2); }
+html:not(.__fb-dark-mode) ::-webkit-scrollbar-thumb:hover { background-color: rgba(0, 0, 0, 0.4); }
+
+/* Tryb OLED: czysta czerń zamiast szarości ciemnego motywu Facebooka. Elementy wyniesione
+   (okienka, pola tekstowe, cudze dymki) dostają bardzo ciemną szarość, żeby nie zlewały się z tłem. */
+html.messy-oled.__fb-dark-mode, html.messy-oled.__fb-dark-mode * {
+	--web-wash: #000 !important;
+	--wash: #000 !important;
+	--surface-background: #000 !important;
+	--card-background: #000 !important;
+	--nav-bar-background: #000 !important;
+	--messenger-card-background: #000 !important;
+	--messenger-reply-background: #000 !important;
+	--mwp-header-background-color: #000 !important;
+	--mwp-message-row-background: #000 !important;
+	--card-background-flat: #121212 !important;
+	--comment-background: #121212 !important;
+	--input-background: #121212 !important;
+	--input-background-hover: #1a1a1a !important;
+	--input-background-disabled: #0a0a0a !important;
+	--toast-background: #121212 !important;
+	--popover-background: #1a1a1a !important;
+	--popover-card-background: #1a1a1a !important;
+	--chat-incoming-message-bubble-background-color: #1c1c1c !important;
+}
+html.messy-oled.__fb-dark-mode, html.messy-oled.__fb-dark-mode body { background: #000 !important; }

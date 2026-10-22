@@ -1,30 +1,29 @@
-// Renderuje assets/icon.svg i assets/icon-unread.svg do PNG w potrzebnych rozmiarach. Uruchamiać przez `npm run icons` (Electron).
+// Renderuje assets/icon.svg i assets/icon-unread.svg do PNG w potrzebnych rozmiarach (`npm run icons`),
+// potem ikony instalatora w src-tauri/icons przez `tauri icon`.
+const {execSync} = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
-const {app, BrowserWindow} = require('electron');
+const screenshot = require('./screenshot');
 
-const SIZE = 256;
 const assets = path.join(__dirname, '..', 'assets');
 const sources = [
 	['icon.svg', [['icon.png', 256], ['IconTray.png', 16], ['IconTray@2x.png', 32]]],
 	['icon-unread.svg', [['IconTrayUnread.png', 16], ['IconTrayUnread@2x.png', 32]]],
 ];
 
-app.whenReady().then(async () => {
-	// Okno nie schodzi poniżej kilkudziesięciu pikseli, więc renderujemy raz duży obraz i zmniejszamy go.
-	const win = new BrowserWindow({show: false, transparent: true, frame: false, webPreferences: {offscreen: true}});
-	win.setContentSize(SIZE, SIZE);
-	for (const [source, outputs] of sources) {
-		const svg = fs.readFileSync(path.join(assets, source), 'utf8');
-		const html = `<html><body style="margin:0;background:transparent">${svg.replace('<svg ', `<svg width="${SIZE}" height="${SIZE}" `)}</body></html>`;
-		await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-		// Po przeładowaniu zrzut bez odczekania łapie jeszcze nieodmalowaną, pustą klatkę.
-		await new Promise(resolve => setTimeout(resolve, 300));
-		const image = await win.webContents.capturePage({x: 0, y: 0, width: SIZE, height: SIZE});
-		for (const [name, size] of outputs) {
-			fs.writeFileSync(path.join(assets, name), image.resize({width: size, height: size, quality: 'best'}).toPNG());
-		}
+for (const [source, outputs] of sources) {
+	const svg = fs.readFileSync(path.join(assets, source), 'utf8');
+	for (const [name, size] of outputs) {
+		const html = `<html><body style="margin:0;background:transparent">${svg.replace('<svg ', `<svg width="${size}" height="${size}" style="display:block" `)}</body></html>`;
+		screenshot(html, path.join(assets, name), size, size);
 	}
+}
 
-	app.quit();
-});
+execSync('npx tauri icon assets/icon.png -o src-tauri/icons', {stdio: 'inherit', cwd: path.join(__dirname, '..')});
+// tauri icon robi też ikony na Androida, iOS i macOS; Messy jest tylko na Windows.
+const icons = path.join(__dirname, '..', 'src-tauri', 'icons');
+for (const name of fs.readdirSync(icons)) {
+	if (!/^(\d+x\d+(@2x)?\.png|icon\.(ico|png))$/.test(name)) {
+		fs.rmSync(path.join(icons, name), {recursive: true, force: true});
+	}
+}

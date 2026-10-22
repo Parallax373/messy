@@ -1,0 +1,16 @@
+{
+	"$schema": "../gen/schemas/desktop-schema.json",
+	"identifier": "messenger",
+	"description": "Polecenia Messy dostępne dla strony Messengera",
+	"windows": ["main"],
+	"remote": {"urls": ["https://www.facebook.com/*", "https://facebook.com/*"]},
+	"permissions": [
+		"allow-get-settings",
+		"allow-set-setting",
+		"allow-get-strings",
+		"allow-get-update-ready",
+		"allow-install-update",
+		"allow-set-unread",
+		"allow-set-fullscreen"
+	]
+}

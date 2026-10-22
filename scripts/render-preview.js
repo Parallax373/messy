@@ -1,8 +1,8 @@
 // Renderuje docs/preview.png: makietę panelu Messy nad zasobnikiem, z wymyślonymi rozmowami
-// (bez prawdziwych danych). Uruchamiać przez `npm run preview` (Electron).
+// (bez prawdziwych danych). Uruchamiać przez `npm run preview`.
 const fs = require('node:fs');
 const path = require('node:path');
-const {app, BrowserWindow} = require('electron');
+const screenshot = require('./screenshot');
 
 const root = path.join(__dirname, '..');
 const icon = svg => `data:image/svg+xml;base64,${Buffer.from(fs.readFileSync(path.join(root, 'assets', svg))).toString('base64')}`;
@@ -57,12 +57,5 @@ const html = `<html><head><meta charset="utf-8"><style>
 	<div class="taskbar"><span>^</span><img src="${icon('icon-unread.svg')}"><span>POL</span><div class="clock">18:42<br>22.10.2026</div></div>
 </body></html>`;
 
-app.whenReady().then(async () => {
-	const win = new BrowserWindow({show: false, width: 1200, height: 760, frame: false, webPreferences: {offscreen: true}});
-	await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-	await new Promise(resolve => setTimeout(resolve, 800));
-	const image = await win.webContents.capturePage({x: 0, y: 0, width: 1200, height: 760});
-	fs.mkdirSync(path.join(root, 'docs'), {recursive: true});
-	fs.writeFileSync(path.join(root, 'docs', 'preview.png'), image.resize({width: 1200, height: 760, quality: 'best'}).toPNG());
-	app.quit();
-});
+fs.mkdirSync(path.join(root, 'docs'), {recursive: true});
+screenshot(html, path.join(root, 'docs', 'preview.png'), 1200, 760);

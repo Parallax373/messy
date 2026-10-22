@@ -7,70 +7,16 @@
 	"author": "Parallax373",
 	"license": "MIT",
 	"repository": "github:Parallax373/messy",
-	"main": "dist/main.js",
 	"scripts": {
-		"icons": "electron scripts/render-icons.js",
-		"preview": "electron scripts/render-preview.js",
-		"build": "tsc",
-		"start": "tsc && electron .",
-		"debug": "tsc && electron . --remote-debugging-port=9223",
-		"dist": "tsc && electron-builder --win --publish never",
-		"dist:store": "tsc && electron-builder --win appx --publish never",
+		"icons": "node scripts/render-icons.js",
+		"preview": "node scripts/render-preview.js",
+		"start": "tauri dev",
+		"debug": "node scripts/debug.js",
+		"dist": "tauri build --config {\"bundle\":{\"createUpdaterArtifacts\":false}}",
 		"release": "node scripts/release.js",
 		"winget": "node scripts/winget.js"
 	},
-	"build": {
-		"appId": "pl.messy.app",
-		"productName": "Messy",
-		"files": [
-			"dist/**",
-			"assets/**",
-			"page/**",
-			"package.json"
-		],
-		"electronLanguages": [
-			"pl",
-			"en-US"
-		],
-		"directories": {
-			"output": "release"
-		},
-		"win": {
-			"target": "nsis",
-			"icon": "assets/icon.png"
-		},
-		"appx": {
-			"identityName": "TODO.PartnerCenter.IdentityName",
-			"publisher": "CN=00000000-0000-0000-0000-000000000000",
-			"publisherDisplayName": "Parallax373",
-			"applicationId": "Messy",
-			"displayName": "Messy",
-			"backgroundColor": "#0062E0",
-			"languages": [
-				"pl-PL",
-				"en-US"
-			],
-			"addAutoLaunchExtension": true,
-			"artifactName": "Messy-${version}.${ext}"
-		},
-		"nsis": {
-			"oneClick": true,
-			"perMachine": false,
-			"artifactName": "Messy-Setup-${version}.${ext}"
-		},
-		"publish": {
-			"provider": "github",
-			"owner": "Parallax373",
-			"repo": "messy",
-			"releaseType": "release"
-		}
-	},
 	"devDependencies": {
-		"electron": "33.4.11",
-		"electron-builder": "25.1.8",
-		"typescript": "5.6.3"
-	},
-	"dependencies": {
-		"electron-updater": "6.3.9"
+		"@tauri-apps/cli": "2.12.4"
 	}
 }

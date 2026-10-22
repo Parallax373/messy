@@ -1,9 +1,10 @@
 // Wydanie nowej wersji: `npm run release` (poprawka, 1.0.0 → 1.0.1), `npm run release -- minor` (1.0.1 → 1.1.0)
 // albo `npm run release -- major`. Podbija wersję (commit + tag), buduje instalator, publikuje go na GitHubie
-// i dopisuje do wydania listę zmian z tytułów commitów.
+// z listą zmian z tytułów commitów.
 // `npm run release -- current` wydaje wersję z package.json bez podbijania (pierwsze wydanie).
 const {execSync} = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const packageFile = path.join(__dirname, '..', 'package.json');
@@ -23,8 +24,13 @@ if (output('git status --porcelain')) {
 	process.exit(1);
 }
 
-// Token z zalogowanego `gh`, żeby nie trzymać go w repo ani w zmiennych środowiskowych.
-const token = output('gh auth token');
+// Klucz prywatny do podpisywania aktualizacji (minisign), poza repo. Bez niego zainstalowane kopie
+// odrzucą aktualizację; klucz publiczny jest w src-tauri/tauri.conf.json.
+const signingKey = process.env.TAURI_SIGNING_PRIVATE_KEY ?? path.join(os.homedir(), '.tauri', 'messy.key');
+if (!process.env.TAURI_SIGNING_PRIVATE_KEY && !fs.existsSync(signingKey)) {
+	console.error(`Brak klucza do podpisywania aktualizacji: ${signingKey}.`);
+	process.exit(1);
+}
 
 // Lista zmian: tytuły commitów od poprzedniego tagu, bez commitów samego podbicia wersji.
 const previousTag = output('git describe --tags --abbrev=0');
@@ -41,14 +47,31 @@ if (bump === 'current') {
 
 const version = readVersion();
 
-// Tag musi być na GitHubie przed publikacją; inaczej electron-builder sam go zakłada na bieżącym main.
 run('git push --follow-tags');
-run('npx tsc');
-run('npx electron-builder --win --publish always', {GH_TOKEN: token});
+run('npx tauri build', {TAURI_SIGNING_PRIVATE_KEY: fs.existsSync(signingKey) ? fs.readFileSync(signingKey, 'utf8') : signingKey});
+
+// Instalator pod stałą nazwą (linki na stronie i w winget) oraz latest.json, który czyta updater w aplikacji.
+const bundle = path.join(__dirname, '..', 'src-tauri', 'target', 'release', 'bundle', 'nsis');
+const built = path.join(bundle, `Messy_${version}_x64-setup.exe`);
+const release = path.join(__dirname, '..', 'release');
+const installer = path.join(release, `Messy-Setup-${version}.exe`);
+fs.mkdirSync(release, {recursive: true});
+fs.copyFileSync(built, installer);
+const latest = path.join(release, 'latest.json');
+fs.writeFileSync(latest, JSON.stringify({
+	version,
+	pub_date: new Date().toISOString(),
+	platforms: {
+		'windows-x86_64': {
+			signature: fs.readFileSync(`${built}.sig`, 'utf8'),
+			url: `https://github.com/Parallax373/messy/releases/download/v${version}/Messy-Setup-${version}.exe`,
+		},
+	},
+}, null, '\t'));
 
 const notes = [
 	...(changes.length > 0 ? changes : ['- Minor fixes / Drobne poprawki']),
 	'',
 	`**Download / Pobierz:** \`Messy-Setup-${version}.exe\` below / poniżej.`,
 ].join('\n');
-execSync(`gh release edit v${version} --notes-file -`, {input: notes, stdio: ['pipe', 'inherit', 'inherit']});
+execSync(`gh release create v${version} --verify-tag --title ${version} --notes-file - "${installer}" "${latest}"`, {input: notes, stdio: ['pipe', 'inherit', 'inherit']});

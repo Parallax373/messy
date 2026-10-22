@@ -1,5 +1,7 @@
 // Wstrzykiwane do strony facebook.com/messages: przyciski trybu OLED i wyciszenia obok „…”
-// w nagłówku „Czaty” oraz klasa trybu OLED na <html> (same kolory są w CSS wstrzykiwanym przez główny proces).
+// w nagłówku „Czaty” oraz klasa trybu OLED na <html> (same kolory są w page/style.css).
+// Messy wstrzykuje go przed skryptami Facebooka, więc atrapa Notification działa od początku,
+// a reszta czeka na DOM.
 (() => {
 	if (window.__messyInjected) {
 		return;
@@ -48,135 +50,158 @@
 		},
 	});
 
-	function render(button, spec) {
-		const on = settings[spec.key];
-		button.setAttribute('aria-label', spec.label(on));
-		button.title = spec.label(on);
-		button.querySelector('path').setAttribute('d', spec.icon(on));
-		button.style.opacity = spec.dimmed(on) ? '0.55' : '';
-	}
+	const style = document.createElement('style');
+	style.textContent = __MESSY_CSS__;
 
-	function apply(value) {
-		settings = value;
-		document.documentElement.classList.toggle('messy-oled', settings.oled);
-		for (const spec of BUTTONS) {
-			const button = document.getElementById(spec.id);
-			if (button) {
+	function start() {
+		document.head.append(style);
+
+		function render(button, spec) {
+			const on = settings[spec.key];
+			button.setAttribute('aria-label', spec.label(on));
+			button.title = spec.label(on);
+			button.querySelector('path').setAttribute('d', spec.icon(on));
+			button.style.opacity = spec.dimmed(on) ? '0.55' : '';
+		}
+
+		function apply(value) {
+			settings = value;
+			document.documentElement.classList.toggle('messy-oled', settings.oled);
+			for (const spec of BUTTONS) {
+				const button = document.getElementById(spec.id);
+				if (button) {
+					render(button, spec);
+				}
+			}
+		}
+
+		function ensureButtons() {
+			if (!strings) {
+				return;
+			}
+
+			// „…” ma stały identyfikator menu niezależny od języka interfejsu.
+			const menuButton = document.querySelector('[aria-controls="mw-inbox-settings-menu"]');
+			if (!menuButton || BUTTONS.every(spec => document.getElementById(spec.id))) {
+				return;
+			}
+
+			// Najwyższy przodek „…”, który zawiera tylko jego, czyli komórka w rzędzie przycisków.
+			let cell = menuButton;
+			while (cell.parentElement && cell.parentElement.children.length < 2) {
+				cell = cell.parentElement;
+			}
+
+			for (const spec of BUTTONS) {
+				document.getElementById(spec.id)?.closest('.messy-cell')?.remove();
+				const clone = cell.cloneNode(true);
+				clone.classList.add('messy-cell');
+				const button = clone.querySelector('[role="button"]') ?? clone;
+				button.id = spec.id;
+				for (const attribute of ['aria-controls', 'aria-expanded', 'aria-haspopup']) {
+					button.removeAttribute(attribute);
+				}
+
+				button.addEventListener('click', async event => {
+					event.preventDefault();
+					event.stopPropagation();
+					await window.messy.setSetting(spec.key, !settings[spec.key]);
+				});
+
 				render(button, spec);
+				cell.before(clone);
 			}
 		}
-	}
 
-	function ensureButtons() {
-		if (!strings) {
-			return;
+		// Liczymy nieprzeczytane rozmowy na liście czatów: Facebook pogrubia ich nazwę i podgląd (600+,
+		// przeczytane mają 500/400). Liczba w tytule strony się nie nadaje, bo obejmuje powiadomienia
+		// Facebooka (dzwonek) i nie zawsze nadąża za wiadomościami.
+		let lastUnread = -1;
+		function reportUnread() {
+			const rows = [...document.querySelectorAll('[role="row"]')].filter(row => row.querySelector('a[href*="/t/"]'));
+			const unread = rows.filter(row => [...row.querySelectorAll('span')].some(span => Number(getComputedStyle(span).fontWeight) >= 600)).length;
+			if (unread !== lastUnread) {
+				lastUnread = unread;
+				window.messy.setUnread(unread);
+			}
 		}
 
-		// „…” ma stały identyfikator menu niezależny od języka interfejsu.
-		const menuButton = document.querySelector('[aria-controls="mw-inbox-settings-menu"]');
-		if (!menuButton || BUTTONS.every(spec => document.getElementById(spec.id))) {
-			return;
-		}
+		setInterval(reportUnread, 2000);
+		reportUnread();
 
-		// Najwyższy przodek „…”, który zawiera tylko jego, czyli komórka w rzędzie przycisków.
-		let cell = menuButton;
-		while (cell.parentElement && cell.parentElement.children.length < 2) {
-			cell = cell.parentElement;
-		}
+		// Zielony przycisk „Zaktualizuj” przed pozostałymi, widoczny tylko gdy aktualizacja jest pobrana.
+		const UPDATE_ID = 'messy-update-button';
+		const DOWNLOAD = 'M10 2.5a.75.75 0 0 1 .75.75v8.69l2.72-2.72a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-1.06 0l-4-4a.75.75 0 1 1 1.06-1.06l2.72 2.72V3.25A.75.75 0 0 1 10 2.5zM3.75 16a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H3.75z';
+		let updateVersion = null;
 
-		for (const spec of BUTTONS) {
-			document.getElementById(spec.id)?.closest('.messy-cell')?.remove();
-			const clone = cell.cloneNode(true);
-			clone.classList.add('messy-cell');
+		function ensureUpdateButton() {
+			const existing = document.getElementById(UPDATE_ID);
+			if (!updateVersion || !strings) {
+				existing?.closest('.messy-cell')?.remove();
+				return;
+			}
+
+			const first = document.getElementById(BUTTONS[0].id)?.closest('.messy-cell');
+			if (existing || !first) {
+				return;
+			}
+
+			const clone = first.cloneNode(true);
 			const button = clone.querySelector('[role="button"]') ?? clone;
-			button.id = spec.id;
-			for (const attribute of ['aria-controls', 'aria-expanded', 'aria-haspopup']) {
-				button.removeAttribute(attribute);
-			}
-
-			button.addEventListener('click', async event => {
+			button.id = UPDATE_ID;
+			button.setAttribute('aria-label', strings.update.replace('{version}', updateVersion));
+			button.title = strings.updateHint.replace('{version}', updateVersion);
+			button.style.opacity = '';
+			button.style.color = '#31A24C';
+			button.querySelector('svg').style.setProperty('--x-color', '#31A24C');
+			button.querySelector('path').setAttribute('d', DOWNLOAD);
+			button.addEventListener('click', event => {
 				event.preventDefault();
 				event.stopPropagation();
-				await window.messy.setSetting(spec.key, !settings[spec.key]);
+				window.messy.installUpdate();
 			});
-
-			render(button, spec);
-			cell.before(clone);
-		}
-	}
-
-	// Liczymy nieprzeczytane rozmowy na liście czatów: Facebook pogrubia ich nazwę i podgląd (600+,
-	// przeczytane mają 500/400). Liczba w tytule strony się nie nadaje, bo obejmuje powiadomienia
-	// Facebooka (dzwonek) i nie zawsze nadąża za wiadomościami.
-	let lastUnread = -1;
-	function reportUnread() {
-		const rows = [...document.querySelectorAll('[role="row"]')].filter(row => row.querySelector('a[href*="/t/"]'));
-		const unread = rows.filter(row => [...row.querySelectorAll('span')].some(span => Number(getComputedStyle(span).fontWeight) >= 600)).length;
-		if (unread !== lastUnread) {
-			lastUnread = unread;
-			window.messy.setUnread(unread);
-		}
-	}
-
-	setInterval(reportUnread, 2000);
-	reportUnread();
-
-	// Zielony przycisk „Zaktualizuj” przed pozostałymi, widoczny tylko gdy aktualizacja jest pobrana.
-	const UPDATE_ID = 'messy-update-button';
-	const DOWNLOAD = 'M10 2.5a.75.75 0 0 1 .75.75v8.69l2.72-2.72a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-1.06 0l-4-4a.75.75 0 1 1 1.06-1.06l2.72 2.72V3.25A.75.75 0 0 1 10 2.5zM3.75 16a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H3.75z';
-	let updateVersion = null;
-
-	function ensureUpdateButton() {
-		const existing = document.getElementById(UPDATE_ID);
-		if (!updateVersion || !strings) {
-			existing?.closest('.messy-cell')?.remove();
-			return;
+			first.before(clone);
 		}
 
-		const first = document.getElementById(BUTTONS[0].id)?.closest('.messy-cell');
-		if (existing || !first) {
-			return;
-		}
-
-		const clone = first.cloneNode(true);
-		const button = clone.querySelector('[role="button"]') ?? clone;
-		button.id = UPDATE_ID;
-		button.setAttribute('aria-label', strings.update.replace('{version}', updateVersion));
-		button.title = strings.updateHint.replace('{version}', updateVersion);
-		button.style.opacity = '';
-		button.style.color = '#31A24C';
-		button.querySelector('svg').style.setProperty('--x-color', '#31A24C');
-		button.querySelector('path').setAttribute('d', DOWNLOAD);
-		button.addEventListener('click', event => {
-			event.preventDefault();
-			event.stopPropagation();
-			window.messy.installUpdate();
+		window.messy.onUpdateReady(version => {
+			updateVersion = version;
+			document.getElementById(UPDATE_ID)?.closest('.messy-cell')?.remove();
+			ensureUpdateButton();
 		});
-		first.before(clone);
+
+		window.messy.getUpdateReady().then(version => {
+			updateVersion = version;
+			ensureUpdateButton();
+		});
+
+		new MutationObserver(ensureUpdateButton).observe(document.body, {childList: true, subtree: true});
+
+		window.messy.onSettingsChange(apply);
+
+		Promise.all([window.messy.getSettings(), window.messy.getStrings()]).then(([value, texts]) => {
+			strings = texts;
+			apply(value);
+			ensureButtons();
+			ensureUpdateButton();
+		});
+
+		// Facebook przebudowuje nagłówek przy nawigacji, więc przyciski dokładamy ponownie, gdy znikną.
+		new MutationObserver(ensureButtons).observe(document.body, {childList: true, subtree: true});
+
+		// Podgląd zdjęć i filmów (/messenger_media) na pełnym ekranie, po zamknięciu z powrotem panel.
+		let mediaOpen = false;
+		new MutationObserver(() => {
+			const open = location.pathname.startsWith('/messenger_media');
+			if (open !== mediaOpen) {
+				mediaOpen = open;
+				window.messy.setFullscreen(open);
+			}
+		}).observe(document.body, {childList: true, subtree: true});
 	}
 
-	window.messy.onUpdateReady(version => {
-		updateVersion = version;
-		document.getElementById(UPDATE_ID)?.closest('.messy-cell')?.remove();
-		ensureUpdateButton();
-	});
-
-	window.messy.getUpdateReady().then(version => {
-		updateVersion = version;
-		ensureUpdateButton();
-	});
-
-	new MutationObserver(ensureUpdateButton).observe(document.body, {childList: true, subtree: true});
-
-	window.messy.onSettingsChange(apply);
-
-	Promise.all([window.messy.getSettings(), window.messy.getStrings()]).then(([value, texts]) => {
-		strings = texts;
-		apply(value);
-		ensureButtons();
-		ensureUpdateButton();
-	});
-
-	// Facebook przebudowuje nagłówek przy nawigacji, więc przyciski dokładamy ponownie, gdy znikną.
-	new MutationObserver(ensureButtons).observe(document.body, {childList: true, subtree: true});
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', start, {once: true});
+	} else {
+		start();
+	}
 })();
