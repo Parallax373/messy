@@ -188,10 +188,22 @@
 		// Facebook przebudowuje nagłówek przy nawigacji, więc przyciski dokładamy ponownie, gdy znikną.
 		new MutationObserver(ensureButtons).observe(document.body, {childList: true, subtree: true});
 
-		// Podgląd zdjęć i filmów (/messenger_media) na pełnym ekranie, po zamknięciu z powrotem panel.
+		// Podgląd zdjęć i filmów na pełnym ekranie, po zamknięciu z powrotem panel. Zwykłe czaty otwierają go
+		// pod /messenger_media, szyfrowane (/messages/e2ee) jako warstwę bez zmiany adresu. Tę rozpoznajemy po
+		// przycisku pobierania (link do pliku blob:), który zajmuje cały ekran razem z warstwą.
+		const isMediaViewer = () => [...document.querySelectorAll('a[download][href^="blob:"]')].some(link => {
+			let layer = link;
+			for (let i = 0; i < 8 && layer; i++) {
+				layer = layer.parentElement;
+				if (layer && layer.offsetWidth >= document.documentElement.clientWidth && layer.offsetHeight >= innerHeight * 0.9) {
+					return true;
+				}
+			}
+			return false;
+		});
 		let mediaOpen = false;
 		new MutationObserver(() => {
-			const open = location.pathname.startsWith('/messenger_media');
+			const open = location.pathname.startsWith('/messenger_media') || isMediaViewer();
 			if (open !== mediaOpen) {
 				mediaOpen = open;
 				window.messy.setFullscreen(open);
