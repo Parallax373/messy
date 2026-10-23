@@ -244,7 +244,10 @@
 			}
 		}, true);
 
-		// Kursor nad panelem: przypięty panel jest wtedy w pełni widoczny (przezroczystość w main.rs).
+		// Kursor nad panelem: przypięty panel ma wtedy pełne tło (update_opacity w main.rs).
+		window.messy.onDim(on => document.documentElement.classList.toggle('messy-dim', on));
+		// Po przeładowaniu strona nie zna stanu: zgłoszenie kursora sprawia, że Messy odeśle „dim”.
+		window.messy.setHover(document.documentElement.matches(':hover'));
 		document.documentElement.addEventListener('mouseenter', () => window.messy.setHover(true));
 		document.documentElement.addEventListener('mouseleave', () => window.messy.setHover(false));
 

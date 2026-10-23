@@ -2182,7 +2182,6 @@ dependencies = [
  "tokio",
  "url",
  "webview2-com",
- "windows",
 ]
 
 [[package]]

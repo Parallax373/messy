@@ -44,3 +44,31 @@ html.messy-oled.__fb-dark-mode, html.messy-oled.__fb-dark-mode * {
 	--chat-incoming-message-bubble-background-color: #1c1c1c !important;
 }
 html.messy-oled.__fb-dark-mode, html.messy-oled.__fb-dark-mode body { background: #000 !important; }
+
+/* Przypięty, nieużywany panel (klasa messy-dim z main.rs, update_opacity): tło kryje w 20%, okno jest
+   przezroczyste, więc widać to, co pod spodem. Dymki, zdjęcia i przyciski zostają pełne. Selektor jest
+   mocniejszy od trybu OLED, który ustawia te same zmienne. Cień tekstu trzyma nazwy i godziny czytelne. */
+html.messy-dim.messy-dim.messy-dim, html.messy-dim.messy-dim.messy-dim * {
+	--web-wash: rgba(0, 0, 0, .2) !important;
+	--wash: rgba(0, 0, 0, .2) !important;
+	--surface-background: transparent !important;
+	--card-background: transparent !important;
+	--card-background-flat: transparent !important;
+	--nav-bar-background: transparent !important;
+	--messenger-card-background: transparent !important;
+	--messenger-reply-background: transparent !important;
+	--mwp-header-background-color: transparent !important;
+	--mwp-message-row-background: transparent !important;
+	--comment-background: transparent !important;
+	--input-background: rgba(0, 0, 0, .35) !important;
+}
+html.messy-dim.messy-dim.messy-dim:not(.__fb-dark-mode), html.messy-dim.messy-dim.messy-dim:not(.__fb-dark-mode) * {
+	--web-wash: rgba(255, 255, 255, .2) !important;
+	--wash: rgba(255, 255, 255, .2) !important;
+	--input-background: rgba(255, 255, 255, .35) !important;
+}
+html.messy-dim.messy-dim.messy-dim, html.messy-dim.messy-dim.messy-dim body { background: var(--web-wash) !important; }
+html.messy-dim.__fb-dark-mode span { text-shadow: 0 0 2px #000, 0 0 4px #000; }
+html.messy-dim:not(.__fb-dark-mode) span { text-shadow: 0 0 2px #fff, 0 0 4px #fff; }
+/* Rozmowy z motywem mają gradient na całym kontenerze (Facebook przykrywa go tłem poza dymkami). */
+html.messy-dim [style*="--chat-composer-button-color"] { background-image: none !important; }

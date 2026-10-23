@@ -55,8 +55,6 @@ impl Default for Settings {
 	}
 }
 
-// Przezroczystość przypiętego panelu, gdy nie jest używany.
-const DIM_OPACITY: u8 = 204; // 80%
 
 // Rozmiar panelu (w pikselach logicznych) zapamiętany między uruchomieniami.
 #[derive(Serialize, Deserialize)]
@@ -133,27 +131,15 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 	update_opacity(app);
 }
 
-// Przypięty panel bez fokusu i bez kursora nad sobą robi się półprzezroczysty, inaczej jest pełny.
+// Przypięty panel bez fokusu i bez kursora nad sobą ma prawie przezroczyste tło (dymki zostają pełne);
+// klasę messy-dim na <html> przełącza page/inject.js, kolory są w page/style.css.
 fn update_opacity(app: &AppHandle) {
-	use windows::Win32::Foundation::COLORREF;
-	use windows::Win32::UI::WindowsAndMessaging::{GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW, GWL_EXSTYLE, LWA_ALPHA, WS_EX_LAYERED};
-
 	let Some(window) = main_window(app) else {
-		return;
-	};
-	let Ok(hwnd) = window.hwnd() else {
 		return;
 	};
 	let settings = *state(app).settings.lock().unwrap();
 	let idle = !window.is_focused().unwrap_or(true) && !*state(app).hovered.lock().unwrap();
-	let alpha = if settings.pinned && settings.translucent && idle { DIM_OPACITY } else { 255 };
-	unsafe {
-		let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-		if style & WS_EX_LAYERED.0 as isize == 0 {
-			SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED.0 as isize);
-		}
-		let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), alpha, LWA_ALPHA);
-	}
+	emit_to_page(app, "dim", settings.pinned && settings.translucent && idle);
 }
 
 #[tauri::command]
@@ -465,6 +451,8 @@ fn create_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
 		.shadow(false)
 		.skip_taskbar(true)
 		.always_on_top(true)
+		// Przezroczyste okno: tło przypiętego, nieużywanego panelu prześwituje (page/style.css, messy-dim).
+		.transparent(true)
 		.initialization_script(page_script())
 		.on_new_window(move |url, features| {
 			if is_call_window(&url) {
