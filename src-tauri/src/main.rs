@@ -47,13 +47,15 @@ struct Settings {
 	pinned: bool,
 	// Przypięty panel bez kursora nad sobą ma prawie przezroczyste tło (chyba że piszesz).
 	translucent: bool,
+	// Zwykłe okno z ramką i paskiem zadań zamiast panelu nad zasobnikiem (np. na drugim monitorze).
+	window_mode: bool,
 	// Bez przycisku rozmowy wideo w nagłówku rozmowy.
 	hide_video_call: bool,
 }
 
 impl Default for Settings {
 	fn default() -> Self {
-		Settings { muted: false, oled: false, pinned: false, translucent: true, hide_video_call: false }
+		Settings { muted: false, oled: false, pinned: false, translucent: true, window_mode: false, hide_video_call: false }
 	}
 }
 
@@ -115,6 +117,7 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 			"oled" => settings.oled = value,
 			"pinned" => settings.pinned = value,
 			"translucent" => settings.translucent = value,
+			"window_mode" => settings.window_mode = value,
 			"hide_video_call" => settings.hide_video_call = value,
 			_ => return,
 		}
@@ -124,9 +127,68 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 	emit_to_page(app, "settings-changed", settings);
 	build_tray_menu(app);
 	// Odpięty panel wraca nad zasobnik.
-	if key == "pinned" && !value {
+	if (key == "pinned" && !value) || key == "window_mode" {
 		if let Some(window) = main_window(app) {
-			position_window(app, &window);
+			restore_window(app, &window);
+		}
+	}
+}
+
+// Położenie i rozmiar okna w trybie okna (piksele fizyczne), zapamiętane osobno od panelu.
+#[derive(Serialize, Deserialize, Clone, Copy)]
+struct Geometry {
+	x: i32,
+	y: i32,
+	width: u32,
+	height: u32,
+	maximized: bool,
+}
+
+fn save_geometry(app: &AppHandle, window: &Window) {
+	if window.is_minimized().unwrap_or(false) {
+		return;
+	}
+	let maximized = window.is_maximized().unwrap_or(false);
+	let previous = read_json::<Geometry>(app, "window-mode.json");
+	let geometry = match (maximized, previous) {
+		// Zmaksymalizowane okno: zostawiamy zwykły rozmiar, żeby po przywróceniu wróciło do niego.
+		(true, Some(previous)) => Geometry { maximized: true, ..previous },
+		_ => {
+			let (Ok(position), Ok(size)) = (window.outer_position(), window.inner_size()) else {
+				return;
+			};
+			Geometry { x: position.x, y: position.y, width: size.width, height: size.height, maximized }
+		}
+	};
+	write_json(app, "window-mode.json", &geometry);
+}
+
+// Ustawia okno według trybu: zwykłe okno (ramka, pasek zadań, zapamiętane miejsce) albo panel nad zasobnikiem.
+fn restore_window(app: &AppHandle, window: &WebviewWindow) {
+	let settings = *state(app).settings.lock().unwrap();
+	let window_mode = settings.window_mode;
+	let _ = window.set_decorations(window_mode);
+	let _ = window.set_shadow(window_mode);
+	let _ = window.set_skip_taskbar(!window_mode);
+	let _ = window.set_always_on_top(!window_mode);
+	if window_mode {
+		if let Some(geometry) = read_json::<Geometry>(app, "window-mode.json") {
+			let _ = window.set_position(PhysicalPosition::new(geometry.x, geometry.y));
+			let _ = window.set_size(PhysicalSize::new(geometry.width, geometry.height));
+			if geometry.maximized {
+				let _ = window.maximize();
+			}
+		}
+		return;
+	}
+	if window.is_maximized().unwrap_or(false) {
+		let _ = window.unmaximize();
+	}
+	position_window(app, window);
+	// Przypięty panel otwiera się tam, gdzie go zostawiono.
+	if settings.pinned {
+		if let Some((x, y)) = read_json::<(i32, i32)>(app, "window-position.json") {
+			let _ = window.set_position(PhysicalPosition::new(x, y));
 		}
 	}
 }
@@ -148,6 +210,10 @@ fn drag_window(app: AppHandle, phase: String, dx: f64, dy: f64) {
 		}
 		_ => {
 			*state.drag_origin.lock().unwrap() = None;
+			// W trybie okna położenie zapisuje zdarzenie Moved, a przypinanie nie ma sensu.
+			if state.settings.lock().unwrap().window_mode {
+				return;
+			}
 			if let Ok(position) = window.outer_position() {
 				write_json(&app, "window-position.json", &(position.x, position.y));
 			}
@@ -192,7 +258,7 @@ fn set_fullscreen(app: AppHandle, on: bool) {
 	};
 	let _ = window.set_fullscreen(on);
 	if !on {
-		position_window(&app, &window);
+		restore_window(&app, &window);
 	}
 }
 
@@ -255,6 +321,7 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		Box::new(CheckMenuItem::with_id(app, "oled", strings.oled, true, settings.oled, None::<&str>)?),
 		Box::new(CheckMenuItem::with_id(app, "pinned", strings.pin, true, settings.pinned, None::<&str>)?),
 		Box::new(CheckMenuItem::with_id(app, "translucent", strings.translucent, true, settings.translucent, None::<&str>)?),
+		Box::new(CheckMenuItem::with_id(app, "window_mode", strings.window_mode, true, settings.window_mode, None::<&str>)?),
 		Box::new(CheckMenuItem::with_id(app, "hide_video_call", strings.hide_video_call, true, settings.hide_video_call, None::<&str>)?),
 		Box::new(CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?),
 		Box::new(MenuItem::with_id(app, "devtools", strings.dev_tools, true, None::<&str>)?),
@@ -281,6 +348,10 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 			}
 		}
 		"translucent" => set_setting_value(app, "translucent", !settings.translucent),
+		"window_mode" => {
+			set_setting_value(app, "window_mode", !settings.window_mode);
+			show_window(app);
+		}
 		"hide_video_call" => set_setting_value(app, "hide_video_call", !settings.hide_video_call),
 		"autostart" => {
 			let autolaunch = app.autolaunch();
@@ -362,14 +433,9 @@ fn show_window(app: &AppHandle) {
 	let Some(window) = main_window(app) else {
 		return;
 	};
-	position_window(app, &window);
-	// Przypięty panel otwiera się tam, gdzie go zostawiono.
-	if state(app).settings.lock().unwrap().pinned {
-		if let Some((x, y)) = read_json::<(i32, i32)>(app, "window-position.json") {
-			let _ = window.set_position(PhysicalPosition::new(x, y));
-		}
-	}
+	restore_window(app, &window);
 	let _ = window.show();
+	let _ = window.unminimize();
 	let _ = window.set_focus();
 }
 
@@ -377,6 +443,11 @@ fn toggle_window(app: &AppHandle) {
 	let Some(window) = main_window(app) else {
 		return;
 	};
+	// Zwykłe okno: klik w ikonę zawsze je wyciąga na wierzch (chowa się krzyżykiem albo minimalizacją).
+	if state(app).settings.lock().unwrap().window_mode {
+		show_window(app);
+		return;
+	}
 	let recently_hidden = state(app).hidden_by_blur_at.lock().unwrap().is_some_and(|at| at.elapsed() < Duration::from_millis(300));
 	if window.is_visible().unwrap_or(false) {
 		let _ = window.hide();
@@ -400,10 +471,16 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
 	match event {
 		WindowEvent::Focused(false) => {
 			let devtools_open = main_window(app).is_some_and(|window| window.is_devtools_open());
-			let pinned = state(app).settings.lock().unwrap().pinned;
+			let settings = *state(app).settings.lock().unwrap();
+			let pinned = settings.pinned || settings.window_mode;
 			if !devtools_open && !pinned && window.is_visible().unwrap_or(false) {
 				*state(app).hidden_by_blur_at.lock().unwrap() = Some(Instant::now());
 				let _ = window.hide();
+			}
+		}
+		WindowEvent::Moved(_) | WindowEvent::Resized(_) if state(app).settings.lock().unwrap().window_mode => {
+			if window.is_visible().unwrap_or(false) && !window.is_fullscreen().unwrap_or(false) {
+				save_geometry(app, window);
 			}
 		}
 		WindowEvent::Resized(size) if window.is_visible().unwrap_or(false) && !window.is_fullscreen().unwrap_or(false) && size.width > 0 => {

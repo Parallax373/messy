@@ -70,7 +70,7 @@
 		function updateDim() {
 			const active = document.activeElement;
 			const typing = document.hasFocus() && active && (active.isContentEditable || /^(INPUT|TEXTAREA)$/.test(active.tagName));
-			const dim = Boolean(settings.pinned && settings.translucent && !hovered && !typing);
+			const dim = Boolean(settings.pinned && !settings.window_mode && settings.translucent && !hovered && !typing);
 			document.documentElement.classList.toggle('messy-dim', dim);
 		}
 		document.documentElement.addEventListener('mouseenter', () => {
@@ -99,6 +99,7 @@
 			settings = value;
 			document.documentElement.classList.toggle('messy-oled', settings.oled);
 			document.documentElement.classList.toggle('messy-no-video', settings.hide_video_call);
+			document.documentElement.classList.toggle('messy-window-mode', settings.window_mode);
 			updateDim();
 			for (const spec of BUTTONS) {
 				const button = document.getElementById(spec.id);
