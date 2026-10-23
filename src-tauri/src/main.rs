@@ -38,12 +38,25 @@ fn page_script() -> String {
 }
 
 // Przełączniki zapamiętane między uruchomieniami; strona dostaje je przez page/bridge.js.
-#[derive(Serialize, Deserialize, Clone, Copy, Default)]
+#[derive(Serialize, Deserialize, Clone, Copy)]
 #[serde(default)]
 struct Settings {
 	muted: bool,
 	oled: bool,
+	// Przypięty panel nie chowa się po kliknięciu obok i stoi tam, gdzie go przeciągnięto.
+	pinned: bool,
+	// Przypięty panel bez fokusu i bez kursora nad sobą jest półprzezroczysty.
+	translucent: bool,
 }
+
+impl Default for Settings {
+	fn default() -> Self {
+		Settings { muted: false, oled: false, pinned: false, translucent: true }
+	}
+}
+
+// Przezroczystość przypiętego panelu, gdy nie jest używany.
+const DIM_OPACITY: u8 = 204; // 80%
 
 // Rozmiar panelu (w pikselach logicznych) zapamiętany między uruchomieniami.
 #[derive(Serialize, Deserialize)]
@@ -60,6 +73,10 @@ struct AppState {
 	hidden_by_blur_at: Mutex<Option<Instant>>,
 	// Ostatnie położenie ikony zasobnika, przy niej otwiera się panel.
 	tray_rect: Mutex<Option<Rect>>,
+	// Kursor jest nad panelem (zgłasza page/inject.js).
+	hovered: Mutex<bool>,
+	// Położenie okna w chwili rozpoczęcia przeciągania prawym przyciskiem.
+	drag_origin: Mutex<Option<PhysicalPosition<i32>>>,
 }
 
 fn config_file(app: &AppHandle, name: &str) -> PathBuf {
@@ -98,6 +115,8 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 		match key {
 			"muted" => settings.muted = value,
 			"oled" => settings.oled = value,
+			"pinned" => settings.pinned = value,
+			"translucent" => settings.translucent = value,
 			_ => return,
 		}
 		*settings
@@ -105,6 +124,69 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 	write_json(app, "settings.json", &settings);
 	emit_to_page(app, "settings-changed", settings);
 	build_tray_menu(app);
+	// Odpięty panel wraca nad zasobnik.
+	if key == "pinned" && !value {
+		if let Some(window) = main_window(app) {
+			position_window(app, &window);
+		}
+	}
+	update_opacity(app);
+}
+
+// Przypięty panel bez fokusu i bez kursora nad sobą robi się półprzezroczysty, inaczej jest pełny.
+fn update_opacity(app: &AppHandle) {
+	use windows::Win32::Foundation::COLORREF;
+	use windows::Win32::UI::WindowsAndMessaging::{GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW, GWL_EXSTYLE, LWA_ALPHA, WS_EX_LAYERED};
+
+	let Some(window) = main_window(app) else {
+		return;
+	};
+	let Ok(hwnd) = window.hwnd() else {
+		return;
+	};
+	let settings = *state(app).settings.lock().unwrap();
+	let idle = !window.is_focused().unwrap_or(true) && !*state(app).hovered.lock().unwrap();
+	let alpha = if settings.pinned && settings.translucent && idle { DIM_OPACITY } else { 255 };
+	unsafe {
+		let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+		if style & WS_EX_LAYERED.0 as isize == 0 {
+			SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED.0 as isize);
+		}
+		let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), alpha, LWA_ALPHA);
+	}
+}
+
+#[tauri::command]
+fn set_hover(app: AppHandle, on: bool) {
+	*state(&app).hovered.lock().unwrap() = on;
+	update_opacity(&app);
+}
+
+// Przeciąganie panelu prawym przyciskiem (page/inject.js): „start”, potem „move” z przesunięciem kursora
+// od początku w pikselach fizycznych, na koniec „end”. Przeciągnięty panel zostaje przypięty w nowym miejscu.
+#[tauri::command]
+fn drag_window(app: AppHandle, phase: String, dx: f64, dy: f64) {
+	let Some(window) = main_window(&app) else {
+		return;
+	};
+	let state = state(&app);
+	match phase.as_str() {
+		"start" => *state.drag_origin.lock().unwrap() = window.outer_position().ok(),
+		"move" => {
+			if let Some(origin) = *state.drag_origin.lock().unwrap() {
+				let _ = window.set_position(PhysicalPosition::new(origin.x + dx.round() as i32, origin.y + dy.round() as i32));
+			}
+		}
+		_ => {
+			*state.drag_origin.lock().unwrap() = None;
+			if let Ok(position) = window.outer_position() {
+				write_json(&app, "window-position.json", &(position.x, position.y));
+			}
+			if !state.settings.lock().unwrap().pinned {
+				set_setting_value(&app, "pinned", true);
+			}
+		}
+	}
 }
 
 #[tauri::command]
@@ -202,6 +284,8 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		Box::new(MenuItem::with_id(app, "show", strings.show, true, None::<&str>)?),
 		Box::new(CheckMenuItem::with_id(app, "muted", strings.mute, true, settings.muted, None::<&str>)?),
 		Box::new(CheckMenuItem::with_id(app, "oled", strings.oled, true, settings.oled, None::<&str>)?),
+		Box::new(CheckMenuItem::with_id(app, "pinned", strings.pin, true, settings.pinned, None::<&str>)?),
+		Box::new(CheckMenuItem::with_id(app, "translucent", strings.translucent, true, settings.translucent, None::<&str>)?),
 		Box::new(CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?),
 		Box::new(MenuItem::with_id(app, "devtools", strings.dev_tools, true, None::<&str>)?),
 		Box::new(PredefinedMenuItem::separator(app)?),
@@ -220,6 +304,13 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 		"show" => show_window(app),
 		"muted" => set_setting_value(app, "muted", !settings.muted),
 		"oled" => set_setting_value(app, "oled", !settings.oled),
+		"pinned" => {
+			set_setting_value(app, "pinned", !settings.pinned);
+			if !settings.pinned {
+				show_window(app);
+			}
+		}
+		"translucent" => set_setting_value(app, "translucent", !settings.translucent),
 		"autostart" => {
 			let autolaunch = app.autolaunch();
 			let _ = if autolaunch.is_enabled().unwrap_or(false) { autolaunch.disable() } else { autolaunch.enable() };
@@ -301,6 +392,12 @@ fn show_window(app: &AppHandle) {
 		return;
 	};
 	position_window(app, &window);
+	// Przypięty panel otwiera się tam, gdzie go zostawiono.
+	if state(app).settings.lock().unwrap().pinned {
+		if let Some((x, y)) = read_json::<(i32, i32)>(app, "window-position.json") {
+			let _ = window.set_position(PhysicalPosition::new(x, y));
+		}
+	}
 	let _ = window.show();
 	let _ = window.set_focus();
 }
@@ -330,9 +427,12 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
 	}
 	let app = window.app_handle();
 	match event {
+		WindowEvent::Focused(true) => update_opacity(app),
 		WindowEvent::Focused(false) => {
+			update_opacity(app);
 			let devtools_open = main_window(app).is_some_and(|window| window.is_devtools_open());
-			if !devtools_open && window.is_visible().unwrap_or(false) {
+			let pinned = state(app).settings.lock().unwrap().pinned;
+			if !devtools_open && !pinned && window.is_visible().unwrap_or(false) {
 				*state(app).hidden_by_blur_at.lock().unwrap() = Some(Instant::now());
 				let _ = window.hide();
 			}
@@ -461,7 +561,7 @@ fn main() {
 		.plugin(tauri_plugin_notification::init())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_updater::Builder::new().build())
-		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen])
+		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, set_hover, drag_window])
 		.on_window_event(on_window_event)
 		.setup(|app| {
 			let handle = app.handle();
@@ -471,6 +571,8 @@ fn main() {
 				unread: Mutex::new(0),
 				hidden_by_blur_at: Mutex::new(None),
 				tray_rect: Mutex::new(None),
+				hovered: Mutex::new(false),
+				drag_origin: Mutex::new(None),
 			});
 
 			// Uruchamianie z Windowsem włączamy przy pierwszym starcie zainstalowanej aplikacji,

@@ -12,6 +12,7 @@
 	const BELL = 'M10 2a5.5 5.5 0 0 0-5.5 5.5v2.74l-1.4 2.8A1 1 0 0 0 4 14.5h12a1 1 0 0 0 .9-1.46l-1.4-2.8V7.5A5.5 5.5 0 0 0 10 2zm-2.45 13.75a2.5 2.5 0 0 0 4.9 0h-4.9z';
 	const BELL_OFF = 'M2.22 2.22a.75.75 0 0 1 1.06 0l14.5 14.5a.75.75 0 1 1-1.06 1.06l-2.22-2.22H4a1 1 0 0 1-.9-1.46l1.4-2.8V7.5c0-.86.2-1.68.55-2.4L2.22 3.28a.75.75 0 0 1 0-1.06zM10 2a5.5 5.5 0 0 1 5.5 5.5v2.74l1.03 2.06L7.2 2.97A5.48 5.48 0 0 1 10 2zm-2.45 13.75a2.5 2.5 0 0 0 4.9 0h-4.9z';
 	const MOON = 'M8.2 2.1a.75.75 0 0 1 .17.83A6.25 6.25 0 0 0 17.07 11.6a.75.75 0 0 1 1 .9A8 8 0 1 1 7.5 1.93a.75.75 0 0 1 .7.17z';
+	const PIN = 'M12.6 2.2a.75.75 0 0 1 1.06 0l4.14 4.14a.75.75 0 0 1 0 1.06l-1.5 1.5a.75.75 0 0 1-.8.17l-2.6 2.6.3 2.84a.75.75 0 0 1-.21.6l-1.2 1.2a.75.75 0 0 1-1.06 0L7.5 13.06l-4.22 4.22a.75.75 0 0 1-1.06-1.06L6.44 12 3.2 8.76a.75.75 0 0 1 0-1.06l1.2-1.2a.75.75 0 0 1 .6-.22l2.85.3 2.6-2.6a.75.75 0 0 1 .17-.8l1.98-1.98z';
 
 	// Przyciski w kolejności od lewej; każdy przełącza jedno ustawienie.
 	const BUTTONS = [
@@ -29,9 +30,16 @@
 			icon: on => on ? BELL_OFF : BELL,
 			dimmed: on => on,
 		},
+		{
+			id: 'messy-pin-button',
+			key: 'pinned',
+			label: on => on ? strings.pinOn : strings.pinOff,
+			icon: () => PIN,
+			dimmed: on => !on,
+		},
 	];
 
-	let settings = {muted: false, oled: false};
+	let settings = {muted: false, oled: false, pinned: false};
 	// Teksty w języku Windowsa z src/i18n.ts; dopóki nie dotrą, przycisków nie wstawiamy.
 	let strings = null;
 
@@ -187,6 +195,58 @@
 
 		// Facebook przebudowuje nagłówek przy nawigacji, więc przyciski dokładamy ponownie, gdy znikną.
 		new MutationObserver(ensureButtons).observe(document.body, {childList: true, subtree: true});
+
+		// Przytrzymany prawy przycisk przesuwa panel (od 6 px ruchu); krótki klik dalej otwiera zwykłe menu.
+		const dpr = () => window.devicePixelRatio || 1;
+		let drag = null;
+		let swallowContextMenu = false;
+		document.addEventListener('pointerdown', event => {
+			if (event.button === 2) {
+				drag = {x: event.screenX, y: event.screenY, moving: false, frame: 0, pointer: event.pointerId, target: event.target};
+			}
+		}, true);
+		document.addEventListener('pointermove', event => {
+			if (!drag || !(event.buttons & 2)) {
+				return;
+			}
+			const dx = event.screenX - drag.x;
+			const dy = event.screenY - drag.y;
+			if (!drag.moving) {
+				if (Math.hypot(dx, dy) < 6) {
+					return;
+				}
+				drag.moving = true;
+				drag.target.setPointerCapture?.(drag.pointer);
+				window.messy.dragWindow('start');
+			}
+			cancelAnimationFrame(drag.frame);
+			drag.frame = requestAnimationFrame(() => window.messy.dragWindow('move', dx * dpr(), dy * dpr()));
+		}, true);
+		document.addEventListener('pointerup', event => {
+			if (event.button !== 2 || !drag) {
+				return;
+			}
+			if (drag.moving) {
+				cancelAnimationFrame(drag.frame);
+				window.messy.dragWindow('move', (event.screenX - drag.x) * dpr(), (event.screenY - drag.y) * dpr());
+				window.messy.dragWindow('end');
+				swallowContextMenu = true;
+				event.preventDefault();
+				event.stopPropagation();
+			}
+			drag = null;
+		}, true);
+		document.addEventListener('contextmenu', event => {
+			if (swallowContextMenu) {
+				swallowContextMenu = false;
+				event.preventDefault();
+				event.stopPropagation();
+			}
+		}, true);
+
+		// Kursor nad panelem: przypięty panel jest wtedy w pełni widoczny (przezroczystość w main.rs).
+		document.documentElement.addEventListener('mouseenter', () => window.messy.setHover(true));
+		document.documentElement.addEventListener('mouseleave', () => window.messy.setHover(false));
 
 		// Podgląd zdjęć i filmów (/messenger_media) na pełnym ekranie, po zamknięciu z powrotem panel.
 		let mediaOpen = false;

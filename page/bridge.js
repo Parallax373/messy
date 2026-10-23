@@ -26,6 +26,9 @@
 		installUpdate: () => void invoke('install_update'),
 		setUnread: count => void invoke('set_unread', {count}),
 		setFullscreen: on => void invoke('set_fullscreen', {on}),
+		setHover: on => void invoke('set_hover', {on}),
+		// phase: 'start' | 'move' | 'end'; dx, dy: przesunięcie kursora od początku w pikselach fizycznych.
+		dragWindow: (phase, dx = 0, dy = 0) => void invoke('drag_window', {phase, dx, dy}),
 		onSettingsChange: callback => listeners['settings-changed'].push(callback),
 	};
 })();
