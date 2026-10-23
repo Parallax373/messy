@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::image::Image;
-use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, Rect, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent, Wry};
@@ -312,22 +312,36 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		Status::Error(message) => MenuItem::with_id(app, "check", fill(strings.check_updates_error, message), packaged, None::<&str>)?,
 		Status::Idle => MenuItem::with_id(app, "check", strings.check_updates, packaged, None::<&str>)?,
 	};
-	let items: Vec<Box<dyn IsMenuItem<Wry>>> = vec![
+	// Podmenu „Okno”: sposób wyświetlania. Pinezka i przezroczystość nie działają w zwykłym oknie.
+	let panel = !settings.window_mode;
+	let window_menu = Submenu::with_items(app, strings.window_menu, true, &[
+		&CheckMenuItem::with_id(app, "window_mode", strings.window_mode, true, settings.window_mode, None::<&str>)?,
+		&PredefinedMenuItem::separator(app)?,
+		&CheckMenuItem::with_id(app, "pinned", strings.pin, panel, settings.pinned, None::<&str>)?,
+		&CheckMenuItem::with_id(app, "translucent", strings.translucent, panel, settings.translucent, None::<&str>)?,
+	])?;
+	// Podmenu „Wygląd”: kolory i przyciski na stronie.
+	let look_menu = Submenu::with_items(app, strings.look_menu, true, &[
+		&CheckMenuItem::with_id(app, "oled", strings.oled, true, settings.oled, None::<&str>)?,
+		&CheckMenuItem::with_id(app, "hide_video_call", strings.hide_video_call, true, settings.hide_video_call, None::<&str>)?,
+	])?;
+	let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = vec![
 		Box::new(MenuItem::with_id(app, "version", format!("Messy {}", app.package_info().version), false, None::<&str>)?),
 		Box::new(update),
 		Box::new(PredefinedMenuItem::separator(app)?),
 		Box::new(MenuItem::with_id(app, "show", strings.show, true, None::<&str>)?),
-		Box::new(CheckMenuItem::with_id(app, "muted", strings.mute, true, settings.muted, None::<&str>)?),
-		Box::new(CheckMenuItem::with_id(app, "oled", strings.oled, true, settings.oled, None::<&str>)?),
-		Box::new(CheckMenuItem::with_id(app, "pinned", strings.pin, true, settings.pinned, None::<&str>)?),
-		Box::new(CheckMenuItem::with_id(app, "translucent", strings.translucent, true, settings.translucent, None::<&str>)?),
-		Box::new(CheckMenuItem::with_id(app, "window_mode", strings.window_mode, true, settings.window_mode, None::<&str>)?),
-		Box::new(CheckMenuItem::with_id(app, "hide_video_call", strings.hide_video_call, true, settings.hide_video_call, None::<&str>)?),
-		Box::new(CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?),
-		Box::new(MenuItem::with_id(app, "devtools", strings.dev_tools, true, None::<&str>)?),
 		Box::new(PredefinedMenuItem::separator(app)?),
-		Box::new(MenuItem::with_id(app, "quit", strings.quit, true, None::<&str>)?),
+		Box::new(CheckMenuItem::with_id(app, "muted", strings.mute, true, settings.muted, None::<&str>)?),
+		Box::new(CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?),
+		Box::new(window_menu),
+		Box::new(look_menu),
+		Box::new(PredefinedMenuItem::separator(app)?),
 	];
+	// Narzędzia deweloperskie tylko w wersji deweloperskiej; w wydaniu nikt ich nie potrzebuje.
+	if !packaged {
+		items.push(Box::new(MenuItem::with_id(app, "devtools", strings.dev_tools, true, None::<&str>)?));
+	}
+	items.push(Box::new(MenuItem::with_id(app, "quit", strings.quit, true, None::<&str>)?));
 	Menu::with_items(app, &items.iter().map(Box::as_ref).collect::<Vec<_>>())
 }
 
