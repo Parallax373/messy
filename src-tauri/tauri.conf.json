@@ -24,6 +24,7 @@
 				"languages": ["Polish", "English"],
 				"displayLanguageSelector": false,
 				"customLanguageFiles": {"Polish": "languages/Polish.nsh"},
+				"compression": "lzma",
 				"installerHooks": "installer-hooks.nsh"
 			}
 		}
