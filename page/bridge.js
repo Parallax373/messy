@@ -6,7 +6,7 @@
 	}
 
 	const invoke = (command, args) => window.__TAURI_INTERNALS__.invoke(command, args);
-	const listeners = {'settings-changed': [], 'update-ready': [], dim: []};
+	const listeners = {'settings-changed': [], 'update-ready': []};
 
 	// Messy wywołuje to przez eval, gdy zmieni się ustawienie albo stan aktualizacji.
 	window.__messyEmit = (name, value) => {
@@ -26,9 +26,6 @@
 		installUpdate: () => void invoke('install_update'),
 		setUnread: count => void invoke('set_unread', {count}),
 		setFullscreen: on => void invoke('set_fullscreen', {on}),
-		setHover: on => void invoke('set_hover', {on}),
-		// Przypięty panel nie jest używany: tło prawie przezroczyste (page/style.css, messy-dim).
-		onDim: callback => listeners.dim.push(callback),
 		// phase: 'start' | 'move' | 'end'; dx, dy: przesunięcie kursora od początku w pikselach fizycznych.
 		dragWindow: (phase, dx = 0, dy = 0) => void invoke('drag_window', {phase, dx, dy}),
 		onSettingsChange: callback => listeners['settings-changed'].push(callback),

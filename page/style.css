@@ -72,3 +72,5 @@ html.messy-dim.__fb-dark-mode span { text-shadow: 0 0 2px #000, 0 0 4px #000; }
 html.messy-dim:not(.__fb-dark-mode) span { text-shadow: 0 0 2px #fff, 0 0 4px #fff; }
 /* Rozmowy z motywem mają gradient na całym kontenerze (Facebook przykrywa go tłem poza dymkami). */
 html.messy-dim [style*="--chat-composer-button-color"] { background-image: none !important; }
+/* Ustawienie „Ukryj przycisk rozmowy wideo”; komórkę oznacza page/inject.js (markVideoCall). */
+html.messy-no-video .messy-video-cell { display: none !important; }

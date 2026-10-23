@@ -12,7 +12,6 @@
 		"allow-install-update",
 		"allow-set-unread",
 		"allow-set-fullscreen",
-		"allow-set-hover",
 		"allow-drag-window"
 	]
 }

@@ -64,6 +64,29 @@
 	function start() {
 		document.head.append(style);
 
+		// Przypięty panel bez kursora nad sobą ma prawie przezroczyste tło (page/style.css, messy-dim).
+		// Wyjątek: piszesz, czyli okno ma fokus, a kursor tekstowy stoi w polu wiadomości.
+		let hovered = document.documentElement.matches(':hover');
+		function updateDim() {
+			const active = document.activeElement;
+			const typing = document.hasFocus() && active && (active.isContentEditable || /^(INPUT|TEXTAREA)$/.test(active.tagName));
+			const dim = Boolean(settings.pinned && settings.translucent && !hovered && !typing);
+			document.documentElement.classList.toggle('messy-dim', dim);
+		}
+		document.documentElement.addEventListener('mouseenter', () => {
+			hovered = true;
+			updateDim();
+		});
+		document.documentElement.addEventListener('mouseleave', () => {
+			hovered = false;
+			updateDim();
+		});
+		for (const name of ['focusin', 'focusout']) {
+			document.addEventListener(name, () => setTimeout(updateDim));
+		}
+		window.addEventListener('blur', updateDim);
+		window.addEventListener('focus', updateDim);
+
 		function render(button, spec) {
 			const on = settings[spec.key];
 			button.setAttribute('aria-label', spec.label(on));
@@ -75,6 +98,8 @@
 		function apply(value) {
 			settings = value;
 			document.documentElement.classList.toggle('messy-oled', settings.oled);
+			document.documentElement.classList.toggle('messy-no-video', settings.hide_video_call);
+			updateDim();
 			for (const spec of BUTTONS) {
 				const button = document.getElementById(spec.id);
 				if (button) {
@@ -128,24 +153,49 @@
 		// Pinezka także w nagłówku otwartej rozmowy, przed przyciskiem informacji (ostatni po prawej
 		// przycisk nagłówka z aria-expanded bez aria-controls; etykiety zależą od języka, więc ich nie czytamy).
 		const THREAD_PIN_ID = 'messy-thread-pin';
+
+		// Najwyższy przodek przycisku, który zawiera tylko jego, czyli komórka w rzędzie przycisków.
+		function cellOf(button) {
+			let cell = button;
+			while (cell.parentElement && cell.parentElement.children.length < 2) {
+				cell = cell.parentElement;
+			}
+			return cell;
+		}
+
+		// Przyciski rozmowy w nagłówku idą: głosowa, wideo, (pinezka), informacje. Ostatni przycisk przed
+		// informacjami, który nie jest nasz, to wideo; klasa pozwala go ukryć (ustawienie hide_video_call).
+		function markVideoCall(infoCell) {
+			const cells = [...infoCell.parentElement.children].filter(cell =>
+				cell !== infoCell && !cell.classList.contains('messy-cell') && cell.querySelector('[role="button"]:not([aria-expanded])'));
+			const video = cells.at(-1);
+			for (const cell of infoCell.parentElement.querySelectorAll(':scope > .messy-video-cell')) {
+				if (cell !== video) {
+					cell.classList.remove('messy-video-cell');
+				}
+			}
+			if (video && cells.length >= 2 && !video.classList.contains('messy-video-cell')) {
+				video.classList.add('messy-video-cell');
+			}
+		}
 		const PIN_SPEC = BUTTONS.find(spec => spec.key === 'pinned');
 		function ensureThreadPin() {
-			const info =[...document.querySelectorAll('[role="button"][aria-expanded]:not([aria-controls])')]
+			const info = [...document.querySelectorAll('[role="button"][aria-expanded]:not([aria-controls])')]
 				.filter(button => {
 					const rect = button.getBoundingClientRect();
 					return rect.width >= 28 && rect.width <= 48 && rect.top >= 0 && rect.top < 80;
 				})
 				.sort((a, b) => b.getBoundingClientRect().left - a.getBoundingClientRect().left)[0];
+			if (info) {
+				markVideoCall(cellOf(info));
+			}
 			const existing = document.getElementById(THREAD_PIN_ID);
 			if (!strings || !info || (existing && existing.isConnected && existing.getBoundingClientRect().width > 0)) {
 				return;
 			}
 			existing?.closest('.messy-cell')?.remove();
 
-			let cell = info;
-			while (cell.parentElement && cell.parentElement.children.length < 2) {
-				cell = cell.parentElement;
-			}
+			const cell = cellOf(info);
 			// Kopia przycisku informacji: ten sam wygląd i kolor motywu rozmowy, tylko ikona pinezki.
 			const clone = cell.cloneNode(true);
 			clone.classList.add('messy-cell');
@@ -289,13 +339,6 @@
 				event.stopPropagation();
 			}
 		}, true);
-
-		// Kursor nad panelem: przypięty panel ma wtedy pełne tło (update_opacity w main.rs).
-		window.messy.onDim(on => document.documentElement.classList.toggle('messy-dim', on));
-		// Po przeładowaniu strona nie zna stanu: zgłoszenie kursora sprawia, że Messy odeśle „dim”.
-		window.messy.setHover(document.documentElement.matches(':hover'));
-		document.documentElement.addEventListener('mouseenter', () => window.messy.setHover(true));
-		document.documentElement.addEventListener('mouseleave', () => window.messy.setHover(false));
 
 		// Podgląd zdjęć i filmów (/messenger_media) na pełnym ekranie, po zamknięciu z powrotem panel.
 		let mediaOpen = false;

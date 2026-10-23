@@ -45,13 +45,15 @@ struct Settings {
 	oled: bool,
 	// Przypięty panel nie chowa się po kliknięciu obok i stoi tam, gdzie go przeciągnięto.
 	pinned: bool,
-	// Przypięty panel bez fokusu i bez kursora nad sobą jest półprzezroczysty.
+	// Przypięty panel bez kursora nad sobą ma prawie przezroczyste tło (chyba że piszesz).
 	translucent: bool,
+	// Bez przycisku rozmowy wideo w nagłówku rozmowy.
+	hide_video_call: bool,
 }
 
 impl Default for Settings {
 	fn default() -> Self {
-		Settings { muted: false, oled: false, pinned: false, translucent: true }
+		Settings { muted: false, oled: false, pinned: false, translucent: true, hide_video_call: false }
 	}
 }
 
@@ -71,8 +73,6 @@ struct AppState {
 	hidden_by_blur_at: Mutex<Option<Instant>>,
 	// Ostatnie położenie ikony zasobnika, przy niej otwiera się panel.
 	tray_rect: Mutex<Option<Rect>>,
-	// Kursor jest nad panelem (zgłasza page/inject.js).
-	hovered: Mutex<bool>,
 	// Położenie okna w chwili rozpoczęcia przeciągania prawym przyciskiem.
 	drag_origin: Mutex<Option<PhysicalPosition<i32>>>,
 }
@@ -115,6 +115,7 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 			"oled" => settings.oled = value,
 			"pinned" => settings.pinned = value,
 			"translucent" => settings.translucent = value,
+			"hide_video_call" => settings.hide_video_call = value,
 			_ => return,
 		}
 		*settings
@@ -128,24 +129,6 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 			position_window(app, &window);
 		}
 	}
-	update_opacity(app);
-}
-
-// Przypięty panel bez fokusu i bez kursora nad sobą ma prawie przezroczyste tło (dymki zostają pełne);
-// klasę messy-dim na <html> przełącza page/inject.js, kolory są w page/style.css.
-fn update_opacity(app: &AppHandle) {
-	let Some(window) = main_window(app) else {
-		return;
-	};
-	let settings = *state(app).settings.lock().unwrap();
-	let idle = !window.is_focused().unwrap_or(true) && !*state(app).hovered.lock().unwrap();
-	emit_to_page(app, "dim", settings.pinned && settings.translucent && idle);
-}
-
-#[tauri::command]
-fn set_hover(app: AppHandle, on: bool) {
-	*state(&app).hovered.lock().unwrap() = on;
-	update_opacity(&app);
 }
 
 // Przeciąganie panelu prawym przyciskiem (page/inject.js): „start”, potem „move” z przesunięciem kursora
@@ -272,6 +255,7 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		Box::new(CheckMenuItem::with_id(app, "oled", strings.oled, true, settings.oled, None::<&str>)?),
 		Box::new(CheckMenuItem::with_id(app, "pinned", strings.pin, true, settings.pinned, None::<&str>)?),
 		Box::new(CheckMenuItem::with_id(app, "translucent", strings.translucent, true, settings.translucent, None::<&str>)?),
+		Box::new(CheckMenuItem::with_id(app, "hide_video_call", strings.hide_video_call, true, settings.hide_video_call, None::<&str>)?),
 		Box::new(CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?),
 		Box::new(MenuItem::with_id(app, "devtools", strings.dev_tools, true, None::<&str>)?),
 		Box::new(PredefinedMenuItem::separator(app)?),
@@ -297,6 +281,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 			}
 		}
 		"translucent" => set_setting_value(app, "translucent", !settings.translucent),
+		"hide_video_call" => set_setting_value(app, "hide_video_call", !settings.hide_video_call),
 		"autostart" => {
 			let autolaunch = app.autolaunch();
 			let _ = if autolaunch.is_enabled().unwrap_or(false) { autolaunch.disable() } else { autolaunch.enable() };
@@ -413,9 +398,7 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
 	}
 	let app = window.app_handle();
 	match event {
-		WindowEvent::Focused(true) => update_opacity(app),
 		WindowEvent::Focused(false) => {
-			update_opacity(app);
 			let devtools_open = main_window(app).is_some_and(|window| window.is_devtools_open());
 			let pinned = state(app).settings.lock().unwrap().pinned;
 			if !devtools_open && !pinned && window.is_visible().unwrap_or(false) {
@@ -549,7 +532,7 @@ fn main() {
 		.plugin(tauri_plugin_notification::init())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_updater::Builder::new().build())
-		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, set_hover, drag_window])
+		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window])
 		.on_window_event(on_window_event)
 		.setup(|app| {
 			let handle = app.handle();
@@ -559,7 +542,6 @@ fn main() {
 				unread: Mutex::new(0),
 				hidden_by_blur_at: Mutex::new(None),
 				tray_rect: Mutex::new(None),
-				hovered: Mutex::new(false),
 				drag_origin: Mutex::new(None),
 			});
 
