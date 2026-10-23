@@ -31,9 +31,23 @@ const TRAY_ID: &str = "tray";
 const ICON_NORMAL: &[u8] = include_bytes!("../../assets/IconTray@2x.png");
 const ICON_UNREAD: &[u8] = include_bytes!("../../assets/IconTrayUnread@2x.png");
 
+// Wersja deweloperska (npm start) ma znaczek „DEV” w rogu panelu i w dymku ikony,
+// żeby nie pomylić jej z zainstalowaną.
+const DEV_BADGE_CSS: &str = "\nhtml::after { content: 'DEV'; position: fixed; left: 6px; bottom: 6px; z-index: 2147483647; \
+	padding: 1px 6px; border-radius: 4px; background: #e8710a; color: #fff; font: 700 10px/16px system-ui, sans-serif; \
+	letter-spacing: .5px; pointer-events: none; opacity: .9; }\n";
+
+fn dev_label(text: &str) -> String {
+	if cfg!(debug_assertions) { format!("[DEV] {text}") } else { text.to_owned() }
+}
+
 // Skrypty wstrzykiwane do każdej strony, zanim wykonają się skrypty Facebooka.
 fn page_script() -> String {
-	let css = serde_json::to_string(include_str!("../../page/style.css")).unwrap();
+	let mut css = include_str!("../../page/style.css").to_owned();
+	if cfg!(debug_assertions) {
+		css.push_str(DEV_BADGE_CSS);
+	}
+	let css = serde_json::to_string(&css).unwrap();
 	format!("{}\n{}", include_str!("../../page/bridge.js"), include_str!("../../page/inject.js").replace("__MESSY_CSS__", &css))
 }
 
@@ -164,7 +178,7 @@ fn update_tooltip(app: &AppHandle) {
 		None if unread > 0 => fill(t().tooltip_unread, unread),
 		None => t().tooltip.to_owned(),
 	};
-	let _ = tray.set_tooltip(Some(tooltip));
+	let _ = tray.set_tooltip(Some(dev_label(&tooltip)));
 }
 
 // Gotowa aktualizacja: strona pokazuje wtedy przycisk „Zaktualizuj” w nagłówku „Czaty”.
@@ -441,7 +455,7 @@ fn allow_permissions(window: &WebviewWindow) {
 fn create_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
 	TrayIconBuilder::with_id(TRAY_ID)
 		.icon(Image::from_bytes(ICON_NORMAL)?)
-		.tooltip(t().tooltip)
+		.tooltip(dev_label(t().tooltip))
 		.show_menu_on_left_click(false)
 		.on_menu_event(on_menu_event)
 		.on_tray_icon_event(|tray, event| {

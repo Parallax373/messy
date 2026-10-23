@@ -10,8 +10,8 @@
 	"scripts": {
 		"icons": "node scripts/render-icons.js",
 		"preview": "node scripts/render-preview.js",
-		"start": "tauri dev",
-		"debug": "node scripts/debug.js",
+		"start": "node scripts/dev.js",
+		"debug": "node scripts/dev.js --inspect",
 		"dist": "tauri build --config {\"bundle\":{\"createUpdaterArtifacts\":false}}",
 		"release": "node scripts/release.js",
 		"winget": "node scripts/winget.js"
