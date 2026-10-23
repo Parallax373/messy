@@ -12,7 +12,11 @@ npm install
 npm start
 ```
 
-`npm run debug` starts with the WebView2 DevTools port 9223 (open `edge://inspect`), handy for inspecting
+`npm start` first closes an installed Messy (only one copy can run, and the installed one would take over),
+then watches `src-tauri/` and `page/`: saving a file rebuilds and restarts the app. The dev build shows a
+"DEV" badge in the panel corner and "[DEV]" in the tray tooltip.
+
+`npm run debug` does the same with the WebView2 DevTools port 9223 (open `edge://inspect`), handy for inspecting
 the live page. The tray menu also has a "Developer tools" item.
 
 Preview the update button without publishing a release: `$env:MESSY_FAKE_UPDATE="9.9.9"; npm start`.
