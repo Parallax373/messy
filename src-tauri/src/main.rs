@@ -60,6 +60,8 @@ struct AppState {
 	hidden_by_blur_at: Mutex<Option<Instant>>,
 	// Ostatnie położenie ikony zasobnika, przy niej otwiera się panel.
 	tray_rect: Mutex<Option<Rect>>,
+	// Ostatnia zmiana rozmiaru okna; po niej wiadomo, kiedy skończyło się przeciąganie krawędzi.
+	resized_at: Mutex<Option<Instant>>,
 }
 
 fn config_file(app: &AppHandle, name: &str) -> PathBuf {
@@ -323,6 +325,38 @@ fn load_size(app: &AppHandle) -> Size {
 		.unwrap_or(Size { width: 420.0, height: 640.0 })
 }
 
+// Kursor w pasie kilku pikseli wokół krawędzi okna, czyli tam, gdzie łapie się je do zmiany rozmiaru.
+fn cursor_at_edge(window: &Window) -> bool {
+	let (Ok(cursor), Ok(position), Ok(size)) = (window.cursor_position(), window.outer_position(), window.outer_size()) else {
+		return false;
+	};
+	let band = 12.0 * window.scale_factor().unwrap_or(1.0);
+	let (left, top) = (f64::from(position.x), f64::from(position.y));
+	let (right, bottom) = (left + f64::from(size.width), top + f64::from(size.height));
+	let near = cursor.x >= left - band && cursor.x <= right + band && cursor.y >= top - band && cursor.y <= bottom + band;
+	let inside = cursor.x > left + band && cursor.x < right - band && cursor.y > top + band && cursor.y < bottom - band;
+	near && !inside
+}
+
+// Czeka, aż okno przestanie zmieniać rozmiar (pół sekundy bez zmian), i oddaje mu fokus.
+fn return_focus_after_resize(app: AppHandle) {
+	let started = Instant::now();
+	tauri::async_runtime::spawn(async move {
+		while started.elapsed() < Duration::from_secs(30) {
+			tokio::time::sleep(Duration::from_millis(250)).await;
+			let idle = state(&app).resized_at.lock().unwrap().is_none_or(|at| at.elapsed() > Duration::from_millis(500));
+			if idle && started.elapsed() > Duration::from_millis(500) {
+				if let Some(window) = main_window(&app) {
+					if window.is_visible().unwrap_or(false) && !window.is_focused().unwrap_or(true) {
+						let _ = window.set_focus();
+					}
+				}
+				return;
+			}
+		}
+	});
+}
+
 fn on_window_event(window: &Window, event: &WindowEvent) {
 	// Okna rozmów zachowują się jak zwykłe okna.
 	if window.label() != "main" {
@@ -332,12 +366,19 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
 	match event {
 		WindowEvent::Focused(false) => {
 			let devtools_open = main_window(app).is_some_and(|window| window.is_devtools_open());
+			// Okno nie ma ramki: chwycenie krawędzi do zmiany rozmiaru zabiera mu fokus. Wtedy nie chowamy,
+			// a po skończonym przeciąganiu oddajemy fokus, żeby klik obok znów chował panel.
+			if !devtools_open && cursor_at_edge(window) {
+				return_focus_after_resize(app.clone());
+				return;
+			}
 			if !devtools_open && window.is_visible().unwrap_or(false) {
 				*state(app).hidden_by_blur_at.lock().unwrap() = Some(Instant::now());
 				let _ = window.hide();
 			}
 		}
 		WindowEvent::Resized(size) if window.is_visible().unwrap_or(false) && !window.is_fullscreen().unwrap_or(false) && size.width > 0 => {
+			*state(app).resized_at.lock().unwrap() = Some(Instant::now());
 			let logical = size.to_logical::<f64>(window.scale_factor().unwrap_or(1.0));
 			write_json(app, "window-size.json", &Size { width: logical.width.round(), height: logical.height.round() });
 		}
@@ -471,6 +512,7 @@ fn main() {
 				unread: Mutex::new(0),
 				hidden_by_blur_at: Mutex::new(None),
 				tray_rect: Mutex::new(None),
+				resized_at: Mutex::new(None),
 			});
 
 			// Uruchamianie z Windowsem włączamy przy pierwszym starcie zainstalowanej aplikacji,
