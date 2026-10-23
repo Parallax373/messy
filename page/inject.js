@@ -81,6 +81,10 @@
 					render(button, spec);
 				}
 			}
+			const threadPin = document.getElementById('messy-thread-pin');
+			if (threadPin) {
+				render(threadPin, BUTTONS.find(spec => spec.key === 'pinned'));
+			}
 		}
 
 		function ensureButtons() {
@@ -120,6 +124,48 @@
 				cell.before(clone);
 			}
 		}
+
+		// Pinezka także w nagłówku otwartej rozmowy, przed przyciskiem informacji (ostatni po prawej
+		// przycisk nagłówka z aria-expanded bez aria-controls; etykiety zależą od języka, więc ich nie czytamy).
+		const THREAD_PIN_ID = 'messy-thread-pin';
+		const PIN_SPEC = BUTTONS.find(spec => spec.key === 'pinned');
+		function ensureThreadPin() {
+			const info =[...document.querySelectorAll('[role="button"][aria-expanded]:not([aria-controls])')]
+				.filter(button => {
+					const rect = button.getBoundingClientRect();
+					return rect.width >= 28 && rect.width <= 48 && rect.top >= 0 && rect.top < 80;
+				})
+				.sort((a, b) => b.getBoundingClientRect().left - a.getBoundingClientRect().left)[0];
+			const existing = document.getElementById(THREAD_PIN_ID);
+			if (!strings || !info || (existing && existing.isConnected && existing.getBoundingClientRect().width > 0)) {
+				return;
+			}
+			existing?.closest('.messy-cell')?.remove();
+
+			let cell = info;
+			while (cell.parentElement && cell.parentElement.children.length < 2) {
+				cell = cell.parentElement;
+			}
+			// Kopia przycisku informacji: ten sam wygląd i kolor motywu rozmowy, tylko ikona pinezki.
+			const clone = cell.cloneNode(true);
+			clone.classList.add('messy-cell');
+			const button = clone.querySelector('[role="button"]') ?? clone;
+			button.id = THREAD_PIN_ID;
+			button.removeAttribute('aria-expanded');
+			const svg = button.querySelector('svg');
+			if (svg) {
+				svg.setAttribute('viewBox', '0 0 36 36');
+				svg.innerHTML = '<g transform="translate(18,18)scale(1.35)translate(-10,-10)"><path fill="var(--mwp-header-button-color)"></path></g>';
+			}
+			button.addEventListener('click', async event => {
+				event.preventDefault();
+				event.stopPropagation();
+				await window.messy.setSetting('pinned', !settings.pinned);
+			});
+			render(button, PIN_SPEC);
+			cell.before(clone);
+		}
+		new MutationObserver(ensureThreadPin).observe(document.body, {childList: true, subtree: true});
 
 		// Liczymy nieprzeczytane rozmowy na liście czatów: Facebook pogrubia ich nazwę i podgląd (600+,
 		// przeczytane mają 500/400). Liczba w tytule strony się nie nadaje, bo obejmuje powiadomienia
