@@ -23,6 +23,7 @@
 				"installMode": "currentUser",
 				"languages": ["Polish", "English"],
 				"displayLanguageSelector": false,
+				"customLanguageFiles": {"Polish": "languages/Polish.nsh"},
 				"installerHooks": "installer-hooks.nsh"
 			}
 		}
