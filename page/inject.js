@@ -370,6 +370,14 @@
 			}
 		}, true);
 
+		// Esc chowa okno do zasobnika, chyba że zamyka coś na stronie (menu, okno dialogowe, podgląd zdjęć).
+		window.addEventListener('keydown', event => {
+			if (event.key !== 'Escape' || event.defaultPrevented || mediaOpen || document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]')) {
+				return;
+			}
+			window.messy.hideWindow();
+		});
+
 		// Podgląd zdjęć i filmów na pełnym ekranie, po zamknięciu z powrotem panel. Zwykłe czaty otwierają go
 		// pod /messenger_media, szyfrowane (/messages/e2ee) jako warstwę bez zmiany adresu. Tę rozpoznajemy po
 		// przycisku pobierania (link do pliku blob:), który zajmuje cały ekran razem z warstwą.

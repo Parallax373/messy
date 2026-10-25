@@ -29,7 +29,6 @@ const TRAY_ID: &str = "tray";
 
 // Przy nieprzeczytanych dymek w ikonie robi się czerwony (assets/icon-unread.svg).
 const ICON_NORMAL: &[u8] = include_bytes!("../../assets/IconTray@2x.png");
-const ICON_UNREAD: &[u8] = include_bytes!("../../assets/IconTrayUnread@2x.png");
 
 // Wersja deweloperska (npm start) ma znaczek „DEV” w rogu panelu i w dymku ikony,
 // żeby nie pomylić jej z zainstalowaną.
@@ -292,13 +291,65 @@ fn set_fullscreen(app: AppHandle, on: bool) {
 	}
 }
 
+// Esc na stronie (page/inject.js) chowa okno do zasobnika.
+#[tauri::command]
+fn hide_window(app: AppHandle) {
+	if let Some(window) = main_window(&app) {
+		let _ = window.hide();
+	}
+}
+
 #[tauri::command]
 fn set_unread(app: AppHandle, count: u32) {
 	*state(&app).unread.lock().unwrap() = count;
 	if let Some(tray) = app.tray_by_id(TRAY_ID) {
-		let _ = tray.set_icon(Image::from_bytes(if count > 0 { ICON_UNREAD } else { ICON_NORMAL }).ok());
+		let _ = tray.set_icon(if count > 0 { badge_icon(count) } else { Image::from_bytes(ICON_NORMAL).ok() });
 	}
 	update_tooltip(&app);
+}
+
+// Ikona zasobnika z czerwonym kółkiem i liczbą nieprzeczytanych rozmów (powyżej 9: „9+”).
+// Cyfry z małej czcionki 3×5 powiększonej dwukrotnie, bo w zasobniku nie ma czym rysować tekstu.
+fn badge_icon(count: u32) -> Option<Image<'static>> {
+	const DIGITS: [[u8; 5]; 11] = [
+		[7, 5, 5, 5, 7], [2, 6, 2, 2, 7], [7, 1, 7, 4, 7], [7, 1, 7, 1, 7], [5, 5, 7, 1, 1],
+		[7, 4, 7, 1, 7], [7, 4, 7, 5, 7], [7, 1, 1, 1, 1], [7, 5, 7, 5, 7], [7, 5, 7, 1, 7],
+		[0, 2, 7, 2, 0], // „+”
+	];
+	let base = Image::from_bytes(ICON_NORMAL).ok()?;
+	let (width, height) = (base.width() as i32, base.height() as i32);
+	let mut rgba = base.rgba().to_vec();
+	let mut put = |x: i32, y: i32, color: [u8; 4]| {
+		if (0..width).contains(&x) && (0..height).contains(&y) {
+			let i = ((y * width + x) * 4) as usize;
+			rgba[i..i + 4].copy_from_slice(&color);
+		}
+	};
+	let glyphs: Vec<usize> = if count > 9 { vec![9, 10] } else { vec![count as usize] };
+	let radius = if glyphs.len() > 1 { 9.5 } else { 8.0 };
+	let (cx, cy) = (width as f32 - radius, height as f32 - radius);
+	for y in 0..height {
+		for x in 0..width {
+			let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
+			if d <= radius {
+				put(x, y, [0xE4, 0x1E, 0x3F, 0xFF]);
+			}
+		}
+	}
+	let text_width = glyphs.len() as i32 * 8 - 2;
+	let (left, top) = ((cx - text_width as f32 / 2.0).round() as i32, (cy - 5.0).round() as i32);
+	for (n, glyph) in glyphs.iter().enumerate() {
+		for (row, bits) in DIGITS[*glyph].iter().enumerate() {
+			for col in 0..3 {
+				if bits >> (2 - col) & 1 == 1 {
+					for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+						put(left + n as i32 * 8 + col * 2 + dx, top + row as i32 * 2 + dy, [0xFF; 4]);
+					}
+				}
+			}
+		}
+	}
+	Some(Image::new_owned(rgba, width as u32, height as u32))
 }
 
 fn update_tooltip(app: &AppHandle) {
@@ -714,7 +765,7 @@ fn main() {
 		.plugin(tauri_plugin_notification::init())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_updater::Builder::new().build())
-		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window])
+		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window])
 		.on_window_event(on_window_event)
 		.setup(|app| {
 			let handle = app.handle();

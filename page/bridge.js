@@ -28,6 +28,7 @@
 		setFullscreen: on => void invoke('set_fullscreen', {on}),
 		// phase: 'start' | 'move' | 'end'; dx, dy: przesunięcie kursora od początku w pikselach fizycznych.
 		dragWindow: (phase, dx = 0, dy = 0) => void invoke('drag_window', {phase, dx, dy}),
+		hideWindow: () => void invoke('hide_window'),
 		onSettingsChange: callback => listeners['settings-changed'].push(callback),
 	};
 })();
