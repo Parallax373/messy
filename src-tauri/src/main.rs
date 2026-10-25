@@ -748,6 +748,10 @@ fn main() {
 			create_tray(handle)?;
 			updater::setup(handle);
 			build_tray_menu(handle);
+			// Wersja deweloperska od razu pokazuje okno, żeby nie szukać ikony w zasobniku po każdej przebudowie.
+			if cfg!(debug_assertions) {
+				show_window(handle);
+			}
 
 			// Wpis w rejestrze powstaje dopiero, gdy Windows zobaczy ikonę, więc przy pierwszym uruchomieniu ponawiamy.
 			promote_tray_icon();
