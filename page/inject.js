@@ -365,15 +365,13 @@
 			event.preventDefault();
 			event.stopPropagation();
 			if (isBack(event) && inThread()) {
-				// Wąskie okno pokazuje albo listę, albo rozmowę; wtedy klikamy strzałkę powrotu Facebooka
-				// (pierwszy z lewej mały przycisk u góry). Szerokie pokazuje listę obok, wystarczy zmienić adres.
-				const listVisible = [...document.querySelectorAll('[role="row"] a[href*="/t/"]')].some(link => link.getBoundingClientRect().width > 0);
-				const arrow = listVisible ? null : [...document.querySelectorAll('[role="button"], a[role="link"]')]
-					.filter(button => {
-						const rect = button.getBoundingClientRect();
-						return rect.width >= 20 && rect.width <= 48 && rect.top >= 0 && rect.top < 80 && rect.left < 80;
-					})
-					.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left)[0];
+				// Wąskie okno: rozmowa zasłania listę, a w nagłówku jest przycisk „Wstecz” Facebooka (mały przycisk
+				// przy lewej krawędzi rozmowy; etykieta zależy od języka). Szerokie okno: lista obok, wystarczy zmienić adres.
+				const main = document.querySelector('[role="main"]')?.getBoundingClientRect();
+				const arrow = main && [...document.querySelectorAll('[role="main"] [role="button"]')].find(button => {
+					const rect = button.getBoundingClientRect();
+					return rect.width >= 28 && rect.width <= 48 && rect.top >= 0 && rect.top < 60 && rect.left - main.left < 40;
+				});
 				if (arrow) {
 					arrow.click();
 				} else {
