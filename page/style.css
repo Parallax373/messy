@@ -76,5 +76,3 @@ html.messy-dim:not(.__fb-dark-mode) span { text-shadow: 0 0 2px #fff, 0 0 4px #f
 html.messy-dim [style*="--chat-composer-button-color"] { background-image: none !important; }
 /* Ustawienie „Ukryj przycisk rozmowy wideo”; komórkę oznacza page/inject.js (markVideoCall). */
 html.messy-no-video .messy-video-cell { display: none !important; }
-/* W trybie zwykłego okna pinezka nic nie robi, więc jej nie pokazujemy. */
-html.messy-window-mode .messy-cell:has(#messy-pin-button, #messy-thread-pin) { display: none !important; }
