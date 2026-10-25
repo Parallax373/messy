@@ -1,5 +1,5 @@
-// Wstrzykiwane do strony facebook.com/messages: przyciski trybu OLED i wyciszenia obok „…”
-// w nagłówku „Czaty” oraz klasa trybu OLED na <html> (same kolory są w page/style.css).
+// Wstrzykiwane do strony facebook.com/messages: przyciski Messy obok „…” w nagłówku „Czaty” (motyw, wyciszenie,
+// tryb okna/panelu, pinezka), motyw jasny/ciemny i klasy ustawień na <html> (same kolory są w page/style.css).
 // Messy wstrzykuje go przed skryptami Facebooka, więc atrapa Notification działa od początku,
 // a reszta czeka na DOM.
 (() => {
@@ -12,17 +12,19 @@
 	const BELL = 'M10 2a5.5 5.5 0 0 0-5.5 5.5v2.74l-1.4 2.8A1 1 0 0 0 4 14.5h12a1 1 0 0 0 .9-1.46l-1.4-2.8V7.5A5.5 5.5 0 0 0 10 2zm-2.45 13.75a2.5 2.5 0 0 0 4.9 0h-4.9z';
 	const BELL_OFF = 'M2.22 2.22a.75.75 0 0 1 1.06 0l14.5 14.5a.75.75 0 1 1-1.06 1.06l-2.22-2.22H4a1 1 0 0 1-.9-1.46l1.4-2.8V7.5c0-.86.2-1.68.55-2.4L2.22 3.28a.75.75 0 0 1 0-1.06zM10 2a5.5 5.5 0 0 1 5.5 5.5v2.74l1.03 2.06L7.2 2.97A5.48 5.48 0 0 1 10 2zm-2.45 13.75a2.5 2.5 0 0 0 4.9 0h-4.9z';
 	const MOON = 'M8.2 2.1a.75.75 0 0 1 .17.83A6.25 6.25 0 0 0 17.07 11.6a.75.75 0 0 1 1 .9A8 8 0 1 1 7.5 1.93a.75.75 0 0 1 .7.17z';
+	const SUN = 'M10 6a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM10 1.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 1.5zm0 14a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5a.75.75 0 0 1 .75-.75zM1.5 10a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 1.5 10zm14 0a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75z';
+	const WINDOW = 'M4.75 3A1.75 1.75 0 0 0 3 4.75v10.5c0 .97.78 1.75 1.75 1.75h10.5c.97 0 1.75-.78 1.75-1.75V4.75C17 3.78 16.22 3 15.25 3H4.75zM4.5 7.5h11v7.75a.25.25 0 0 1-.25.25H4.75a.25.25 0 0 1-.25-.25V7.5z';
 	const PANEL = 'M3 4.75A1.75 1.75 0 0 1 4.75 3h10.5A1.75 1.75 0 0 1 17 4.75v10.5A1.75 1.75 0 0 1 15.25 17H4.75A1.75 1.75 0 0 1 3 15.25V4.75zM4.5 12v3.25c0 .14.11.25.25.25h10.5a.25.25 0 0 0 .25-.25V12h-11z';
 	const PIN = 'M12.6 2.2a.75.75 0 0 1 1.06 0l4.14 4.14a.75.75 0 0 1 0 1.06l-1.5 1.5a.75.75 0 0 1-.8.17l-2.6 2.6.3 2.84a.75.75 0 0 1-.21.6l-1.2 1.2a.75.75 0 0 1-1.06 0L7.5 13.06l-4.22 4.22a.75.75 0 0 1-1.06-1.06L6.44 12 3.2 8.76a.75.75 0 0 1 0-1.06l1.2-1.2a.75.75 0 0 1 .6-.22l2.85.3 2.6-2.6a.75.75 0 0 1 .17-.8l1.98-1.98z';
 
-	// Przyciski w kolejności od lewej; każdy przełącza jedno ustawienie.
+	// Przyciski w kolejności od lewej; każdy przełącza jedno ustawienie. Ikona pokazuje, co się stanie po kliknięciu.
 	const BUTTONS = [
 		{
-			id: 'messy-oled-button',
-			key: 'oled',
-			label: on => on ? strings.oledOn : strings.oledOff,
-			icon: () => MOON,
-			dimmed: on => !on,
+			id: 'messy-theme-button',
+			key: 'light',
+			label: on => on ? strings.lightOn : strings.lightOff,
+			icon: on => on ? MOON : SUN,
+			dimmed: () => false,
 		},
 		{
 			id: 'messy-mute-button',
@@ -32,17 +34,23 @@
 			dimmed: on => on,
 		},
 		{
+			id: 'messy-mode-button',
+			key: 'window_mode',
+			label: on => on ? strings.backToPanel : strings.toWindow,
+			icon: on => on ? PANEL : WINDOW,
+			dimmed: () => false,
+		},
+		{
+			// Tylko w trybie panelu (page/style.css ukrywa ją w trybie okna).
 			id: 'messy-pin-button',
 			key: 'pinned',
-			// W trybie okna pinezka nie ma sensu, więc ten przycisk przełącza z powrotem na panel.
-			label: on => settings.window_mode ? strings.backToPanel : on ? strings.pinOn : strings.pinOff,
-			icon: () => settings.window_mode ? PANEL : PIN,
-			dimmed: on => !settings.window_mode && !on,
-			toggle: () => settings.window_mode ? window.messy.setSetting('window_mode', false) : window.messy.setSetting('pinned', !settings.pinned),
+			label: on => on ? strings.pinOn : strings.pinOff,
+			icon: () => PIN,
+			dimmed: on => !on,
 		},
 	];
 
-	let settings = {muted: false, oled: false, pinned: false};
+	let settings = {muted: false, light: false, oled: false, pinned: false, window_mode: false};
 	// Teksty w języku Windowsa z src/i18n.ts; dopóki nie dotrą, przycisków nie wstawiamy.
 	let strings = null;
 
@@ -94,16 +102,33 @@
 			const on = settings[spec.key];
 			button.setAttribute('aria-label', spec.label(on));
 			button.title = spec.label(on);
-			button.querySelector('path').setAttribute('d', spec.icon(on));
+			const path = button.querySelector('path');
+			path.setAttribute('d', spec.icon(on));
+			path.setAttribute('fill-rule', 'evenodd');
 			button.style.opacity = spec.dimmed(on) ? '0.55' : '';
 		}
+
+		// Motyw: Facebook oznacza ciemne i jasne fragmenty klasami __fb-dark-mode / __fb-light-mode (zmienne
+		// kolorów), więc wystarczy je zamienić, także w elementach dokładanych później.
+		function applyTheme() {
+			const [from, to] = settings.light ? ['__fb-dark-mode', '__fb-light-mode'] : ['__fb-light-mode', '__fb-dark-mode'];
+			for (const element of document.getElementsByClassName(from)) {
+				element.classList.add(to);
+			}
+			for (const element of [...document.getElementsByClassName(from)]) {
+				element.classList.remove(from);
+			}
+		}
+		new MutationObserver(applyTheme).observe(document.documentElement, {childList: true, subtree: true, attributes: true, attributeFilter: ['class']});
 
 		function apply(value) {
 			settings = value;
 			document.documentElement.classList.toggle('messy-oled', settings.oled);
 			document.documentElement.classList.toggle('messy-no-video', settings.hide_video_call);
 			document.documentElement.classList.toggle('messy-window-mode', settings.window_mode);
+			applyTheme();
 			updateDim();
+			ensureThreadPin();
 			for (const spec of BUTTONS) {
 				const button = document.getElementById(spec.id);
 				if (button) {
@@ -146,7 +171,7 @@
 				button.addEventListener('click', async event => {
 					event.preventDefault();
 					event.stopPropagation();
-					await (spec.toggle ? spec.toggle() : window.messy.setSetting(spec.key, !settings[spec.key]));
+					await window.messy.setSetting(spec.key, !settings[spec.key]);
 				});
 
 				render(button, spec);
@@ -194,6 +219,11 @@
 				markVideoCall(cellOf(info));
 			}
 			const existing = document.getElementById(THREAD_PIN_ID);
+			// W trybie okna pinezka nic nie robi.
+			if (settings.window_mode) {
+				existing?.closest('.messy-cell')?.remove();
+				return;
+			}
 			if (!strings || !info || (existing && existing.isConnected && existing.getBoundingClientRect().width > 0)) {
 				return;
 			}
@@ -214,7 +244,7 @@
 			button.addEventListener('click', async event => {
 				event.preventDefault();
 				event.stopPropagation();
-				await PIN_SPEC.toggle();
+				await window.messy.setSetting('pinned', !settings.pinned);
 			});
 			render(button, PIN_SPEC);
 			cell.before(clone);

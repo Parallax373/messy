@@ -56,6 +56,8 @@ fn page_script() -> String {
 #[serde(default)]
 struct Settings {
 	muted: bool,
+	// Jasny motyw Facebooka zamiast ciemnego, niezależnie od ustawienia konta (page/inject.js).
+	light: bool,
 	oled: bool,
 	// Przypięty panel nie chowa się po kliknięciu obok i stoi tam, gdzie go przeciągnięto.
 	pinned: bool,
@@ -69,7 +71,7 @@ struct Settings {
 
 impl Default for Settings {
 	fn default() -> Self {
-		Settings { muted: false, oled: false, pinned: false, translucent: true, window_mode: false, hide_video_call: false }
+		Settings { muted: false, light: false, oled: false, pinned: false, translucent: true, window_mode: false, hide_video_call: false }
 	}
 }
 
@@ -131,6 +133,7 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 		let mut settings = state.settings.lock().unwrap();
 		match key {
 			"muted" => settings.muted = value,
+			"light" => settings.light = value,
 			"oled" => settings.oled = value,
 			"pinned" => settings.pinned = value,
 			"translucent" => settings.translucent = value,
@@ -360,7 +363,8 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 	])?;
 	// Podmenu „Wygląd”: kolory i przyciski na stronie.
 	let look_menu = Submenu::with_items(app, strings.look_menu, true, &[
-		&CheckMenuItem::with_id(app, "oled", strings.oled, true, settings.oled, None::<&str>)?,
+		&CheckMenuItem::with_id(app, "dark_theme", strings.dark_theme, true, !settings.light, None::<&str>)?,
+		&CheckMenuItem::with_id(app, "oled", strings.oled, !settings.light, settings.oled, None::<&str>)?,
 		&CheckMenuItem::with_id(app, "hide_video_call", strings.hide_video_call, true, settings.hide_video_call, None::<&str>)?,
 	])?;
 	let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = vec![
@@ -392,6 +396,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 		}
 		"show" => show_window(app),
 		"muted" => set_setting_value(app, "muted", !settings.muted),
+		"dark_theme" => set_setting_value(app, "light", !settings.light),
 		"oled" => set_setting_value(app, "oled", !settings.oled),
 		"pinned" => {
 			set_setting_value(app, "pinned", !settings.pinned);
