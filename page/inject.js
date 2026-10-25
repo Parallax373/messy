@@ -214,7 +214,7 @@
 		function threadKeys(info) {
 			const keys = settings.window_mode ? [] : ['pinned'];
 			const listHeader = document.getElementById('messy-mode-button');
-			if (listHeader && listHeader.getBoundingClientRect().width > 0) {
+			if (listHeader?.checkVisibility({visibilityProperty: true})) {
 				return keys;
 			}
 			// Miejsce: od lewej krawędzi rozmowy do przycisku informacji, minus „Wstecz”, tytuł (min. 160 px)
