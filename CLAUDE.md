@@ -23,6 +23,8 @@ użytkownika.
 
 **Klucz prywatny do podpisu aktualizacji** leży w `%USERPROFILE%\.tauri\messy.key` (bez hasła), poza repo. Jego utrata
 oznacza, że żadna zainstalowana kopia nie przyjmie już aktualizacji. Użytkownik powinien mieć jego kopię zapasową.
+Tak już się stało: klucz z wydania 2.0.0 przepadł przy reinstalacji systemu (22.10.2026), w 2.7.1 jest nowy klucz,
+więc 2.0.0 trzeba było przeinstalować ręcznie. Kopia nowego klucza ma leżeć na dysku USB „Backup”.
 
 Wersje 1.x (Electron) sprawdzają `latest.yml`, którego wydania 2.x nie mają, więc same się nie zaktualizują
 (decyzja użytkownika: ręczna reinstalacja). Instalator 2.x po instalacji po cichu odinstalowuje starą wersję
