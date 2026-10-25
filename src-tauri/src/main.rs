@@ -74,6 +74,8 @@ struct AppState {
 	hidden_by_blur_at: Mutex<Option<Instant>>,
 	// Ostatnie położenie ikony zasobnika, przy niej otwiera się panel.
 	tray_rect: Mutex<Option<Rect>>,
+	// Podgląd zdjęcia powiększył panel; tego rozmiaru nie zapisujemy jako rozmiaru panelu.
+	media_open: Mutex<bool>,
 }
 
 fn config_file(app: &AppHandle, name: &str) -> PathBuf {
@@ -147,15 +149,28 @@ fn install_update(app: AppHandle) {
 }
 
 // Liczbę nieprzeczytanych rozmów liczy page/inject.js.
-// Podgląd zdjęć na pełnym ekranie; po wyjściu panel wraca na swoje miejsce nad zasobnikiem.
+// Podgląd zdjęć na całym obszarze roboczym monitora (pasek zadań zostaje widoczny);
+// po zamknięciu panel wraca na swoje miejsce i do swojego rozmiaru nad zasobnikiem.
 #[tauri::command]
 fn set_fullscreen(app: AppHandle, on: bool) {
 	let Some(window) = main_window(&app) else {
 		return;
 	};
-	let _ = window.set_fullscreen(on);
+	*state(&app).media_open.lock().unwrap() = on;
 	if !on {
+		let _ = window.set_zoom(1.0);
 		position_window(&app, &window);
+		return;
+	}
+	if let Ok(Some(monitor)) = window.current_monitor() {
+		let area = monitor.work_area();
+		let _ = window.set_position(area.position);
+		let _ = window.set_size(area.size);
+		// Facebook rysuje przyciski podglądu w stałym rozmiarze, na dużym ekranie są drobne.
+		// Przybliżamy stronę proporcjonalnie do obszaru roboczego (w pikselach logicznych).
+		let logical = area.size.to_logical::<f64>(monitor.scale_factor());
+		let zoom = (logical.width / 1400.0).min(logical.height / 850.0).clamp(1.0, 2.0);
+		let _ = window.set_zoom(zoom);
 	}
 }
 
@@ -361,7 +376,7 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
 				let _ = window.hide();
 			}
 		}
-		WindowEvent::Resized(size) if window.is_visible().unwrap_or(false) && !window.is_fullscreen().unwrap_or(false) && size.width > 0 => {
+		WindowEvent::Resized(size) if window.is_visible().unwrap_or(false) && !*state(app).media_open.lock().unwrap() && size.width > 0 => {
 			let logical = size.to_logical::<f64>(window.scale_factor().unwrap_or(1.0));
 			write_json(app, "window-size.json", &Size { width: logical.width.round(), height: logical.height.round() });
 		}
@@ -506,6 +521,7 @@ fn main() {
 				unread: Mutex::new(0),
 				hidden_by_blur_at: Mutex::new(None),
 				tray_rect: Mutex::new(None),
+				media_open: Mutex::new(false),
 			});
 
 			// Uruchamianie z Windowsem włączamy przy pierwszym starcie zainstalowanej aplikacji,
