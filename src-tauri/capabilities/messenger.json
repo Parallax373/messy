@@ -11,6 +11,7 @@
 		"allow-get-update-ready",
 		"allow-install-update",
 		"allow-set-unread",
-		"allow-set-fullscreen"
+		"allow-set-fullscreen",
+		"allow-drag-window"
 	]
 }

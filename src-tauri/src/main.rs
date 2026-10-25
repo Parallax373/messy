@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::image::Image;
-use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, Rect, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent, Wry};
@@ -52,11 +52,25 @@ fn page_script() -> String {
 }
 
 // Przełączniki zapamiętane między uruchomieniami; strona dostaje je przez page/bridge.js.
-#[derive(Serialize, Deserialize, Clone, Copy, Default)]
+#[derive(Serialize, Deserialize, Clone, Copy)]
 #[serde(default)]
 struct Settings {
 	muted: bool,
 	oled: bool,
+	// Przypięty panel nie chowa się po kliknięciu obok i stoi tam, gdzie go przeciągnięto.
+	pinned: bool,
+	// Przypięty panel bez kursora nad sobą ma prawie przezroczyste tło (chyba że piszesz).
+	translucent: bool,
+	// Zwykłe okno z ramką i paskiem zadań zamiast panelu nad zasobnikiem (np. na drugim monitorze).
+	window_mode: bool,
+	// Bez przycisku rozmowy wideo w nagłówku rozmowy.
+	hide_video_call: bool,
+}
+
+impl Default for Settings {
+	fn default() -> Self {
+		Settings { muted: false, oled: false, pinned: false, translucent: true, window_mode: false, hide_video_call: false }
+	}
 }
 
 // Rozmiar panelu (w pikselach logicznych) zapamiętany między uruchomieniami.
@@ -78,6 +92,8 @@ struct AppState {
 	media_open: Mutex<bool>,
 	// Ostatnia zmiana rozmiaru okna; po niej wiadomo, kiedy skończyło się przeciąganie krawędzi.
 	resized_at: Mutex<Option<Instant>>,
+	// Położenie okna w chwili rozpoczęcia przeciągania prawym przyciskiem.
+	drag_origin: Mutex<Option<PhysicalPosition<i32>>>,
 }
 
 fn config_file(app: &AppHandle, name: &str) -> PathBuf {
@@ -116,6 +132,10 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 		match key {
 			"muted" => settings.muted = value,
 			"oled" => settings.oled = value,
+			"pinned" => settings.pinned = value,
+			"translucent" => settings.translucent = value,
+			"window_mode" => settings.window_mode = value,
+			"hide_video_call" => settings.hide_video_call = value,
 			_ => return,
 		}
 		*settings
@@ -123,6 +143,102 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 	write_json(app, "settings.json", &settings);
 	emit_to_page(app, "settings-changed", settings);
 	build_tray_menu(app);
+	// Odpięty panel wraca nad zasobnik.
+	if (key == "pinned" && !value) || key == "window_mode" {
+		if let Some(window) = main_window(app) {
+			restore_window(app, &window);
+		}
+	}
+}
+
+// Położenie i rozmiar okna w trybie okna (piksele fizyczne), zapamiętane osobno od panelu.
+#[derive(Serialize, Deserialize, Clone, Copy)]
+struct Geometry {
+	x: i32,
+	y: i32,
+	width: u32,
+	height: u32,
+	maximized: bool,
+}
+
+fn save_geometry(app: &AppHandle, window: &Window) {
+	if window.is_minimized().unwrap_or(false) {
+		return;
+	}
+	let maximized = window.is_maximized().unwrap_or(false);
+	let previous = read_json::<Geometry>(app, "window-mode.json");
+	let geometry = match (maximized, previous) {
+		// Zmaksymalizowane okno: zostawiamy zwykły rozmiar, żeby po przywróceniu wróciło do niego.
+		(true, Some(previous)) => Geometry { maximized: true, ..previous },
+		_ => {
+			let (Ok(position), Ok(size)) = (window.outer_position(), window.inner_size()) else {
+				return;
+			};
+			Geometry { x: position.x, y: position.y, width: size.width, height: size.height, maximized }
+		}
+	};
+	write_json(app, "window-mode.json", &geometry);
+}
+
+// Ustawia okno według trybu: zwykłe okno (ramka, pasek zadań, zapamiętane miejsce) albo panel nad zasobnikiem.
+fn restore_window(app: &AppHandle, window: &WebviewWindow) {
+	let settings = *state(app).settings.lock().unwrap();
+	let window_mode = settings.window_mode;
+	let _ = window.set_decorations(window_mode);
+	let _ = window.set_shadow(window_mode);
+	let _ = window.set_skip_taskbar(!window_mode);
+	let _ = window.set_always_on_top(!window_mode);
+	if window_mode {
+		if let Some(geometry) = read_json::<Geometry>(app, "window-mode.json") {
+			let _ = window.set_position(PhysicalPosition::new(geometry.x, geometry.y));
+			let _ = window.set_size(PhysicalSize::new(geometry.width, geometry.height));
+			if geometry.maximized {
+				let _ = window.maximize();
+			}
+		}
+		return;
+	}
+	if window.is_maximized().unwrap_or(false) {
+		let _ = window.unmaximize();
+	}
+	position_window(app, window);
+	// Przypięty panel otwiera się tam, gdzie go zostawiono.
+	if settings.pinned {
+		if let Some((x, y)) = read_json::<(i32, i32)>(app, "window-position.json") {
+			let _ = window.set_position(PhysicalPosition::new(x, y));
+		}
+	}
+}
+
+// Przeciąganie panelu prawym przyciskiem (page/inject.js): „start”, potem „move” z przesunięciem kursora
+// od początku w pikselach fizycznych, na koniec „end”. Przeciągnięty panel zostaje przypięty w nowym miejscu.
+#[tauri::command]
+fn drag_window(app: AppHandle, phase: String, dx: f64, dy: f64) {
+	let Some(window) = main_window(&app) else {
+		return;
+	};
+	let state = state(&app);
+	match phase.as_str() {
+		"start" => *state.drag_origin.lock().unwrap() = window.outer_position().ok(),
+		"move" => {
+			if let Some(origin) = *state.drag_origin.lock().unwrap() {
+				let _ = window.set_position(PhysicalPosition::new(origin.x + dx.round() as i32, origin.y + dy.round() as i32));
+			}
+		}
+		_ => {
+			*state.drag_origin.lock().unwrap() = None;
+			// W trybie okna położenie zapisuje zdarzenie Moved, a przypinanie nie ma sensu.
+			if state.settings.lock().unwrap().window_mode {
+				return;
+			}
+			if let Ok(position) = window.outer_position() {
+				write_json(&app, "window-position.json", &(position.x, position.y));
+			}
+			if !state.settings.lock().unwrap().pinned {
+				set_setting_value(&app, "pinned", true);
+			}
+		}
+	}
 }
 
 #[tauri::command]
@@ -161,7 +277,7 @@ fn set_fullscreen(app: AppHandle, on: bool) {
 	*state(&app).media_open.lock().unwrap() = on;
 	if !on {
 		let _ = window.set_zoom(1.0);
-		position_window(&app, &window);
+		restore_window(&app, &window);
 		return;
 	}
 	if let Ok(Some(monitor)) = window.current_monitor() {
@@ -226,18 +342,36 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		Status::Error(message) => MenuItem::with_id(app, "check", fill(strings.check_updates_error, message), packaged, None::<&str>)?,
 		Status::Idle => MenuItem::with_id(app, "check", strings.check_updates, packaged, None::<&str>)?,
 	};
-	let items: Vec<Box<dyn IsMenuItem<Wry>>> = vec![
+	// Podmenu „Okno”: sposób wyświetlania. Pinezka i przezroczystość nie działają w zwykłym oknie.
+	let panel = !settings.window_mode;
+	let window_menu = Submenu::with_items(app, strings.window_menu, true, &[
+		&CheckMenuItem::with_id(app, "window_mode", strings.window_mode, true, settings.window_mode, None::<&str>)?,
+		&PredefinedMenuItem::separator(app)?,
+		&CheckMenuItem::with_id(app, "pinned", strings.pin, panel, settings.pinned, None::<&str>)?,
+		&CheckMenuItem::with_id(app, "translucent", strings.translucent, panel, settings.translucent, None::<&str>)?,
+	])?;
+	// Podmenu „Wygląd”: kolory i przyciski na stronie.
+	let look_menu = Submenu::with_items(app, strings.look_menu, true, &[
+		&CheckMenuItem::with_id(app, "oled", strings.oled, true, settings.oled, None::<&str>)?,
+		&CheckMenuItem::with_id(app, "hide_video_call", strings.hide_video_call, true, settings.hide_video_call, None::<&str>)?,
+	])?;
+	let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = vec![
 		Box::new(MenuItem::with_id(app, "version", format!("Messy {}", app.package_info().version), false, None::<&str>)?),
 		Box::new(update),
 		Box::new(PredefinedMenuItem::separator(app)?),
 		Box::new(MenuItem::with_id(app, "show", strings.show, true, None::<&str>)?),
-		Box::new(CheckMenuItem::with_id(app, "muted", strings.mute, true, settings.muted, None::<&str>)?),
-		Box::new(CheckMenuItem::with_id(app, "oled", strings.oled, true, settings.oled, None::<&str>)?),
-		Box::new(CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?),
-		Box::new(MenuItem::with_id(app, "devtools", strings.dev_tools, true, None::<&str>)?),
 		Box::new(PredefinedMenuItem::separator(app)?),
-		Box::new(MenuItem::with_id(app, "quit", strings.quit, true, None::<&str>)?),
+		Box::new(CheckMenuItem::with_id(app, "muted", strings.mute, true, settings.muted, None::<&str>)?),
+		Box::new(CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?),
+		Box::new(window_menu),
+		Box::new(look_menu),
+		Box::new(PredefinedMenuItem::separator(app)?),
 	];
+	// Narzędzia deweloperskie tylko w wersji deweloperskiej; w wydaniu nikt ich nie potrzebuje.
+	if !packaged {
+		items.push(Box::new(MenuItem::with_id(app, "devtools", strings.dev_tools, true, None::<&str>)?));
+	}
+	items.push(Box::new(MenuItem::with_id(app, "quit", strings.quit, true, None::<&str>)?));
 	Menu::with_items(app, &items.iter().map(Box::as_ref).collect::<Vec<_>>())
 }
 
@@ -251,6 +385,18 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 		"show" => show_window(app),
 		"muted" => set_setting_value(app, "muted", !settings.muted),
 		"oled" => set_setting_value(app, "oled", !settings.oled),
+		"pinned" => {
+			set_setting_value(app, "pinned", !settings.pinned);
+			if !settings.pinned {
+				show_window(app);
+			}
+		}
+		"translucent" => set_setting_value(app, "translucent", !settings.translucent),
+		"window_mode" => {
+			set_setting_value(app, "window_mode", !settings.window_mode);
+			show_window(app);
+		}
+		"hide_video_call" => set_setting_value(app, "hide_video_call", !settings.hide_video_call),
 		"autostart" => {
 			let autolaunch = app.autolaunch();
 			let _ = if autolaunch.is_enabled().unwrap_or(false) { autolaunch.disable() } else { autolaunch.enable() };
@@ -341,8 +487,9 @@ fn show_window(app: &AppHandle) {
 	let Some(window) = main_window(app) else {
 		return;
 	};
-	position_window(app, &window);
+	restore_window(app, &window);
 	let _ = window.show();
+	let _ = window.unminimize();
 	let _ = window.set_focus();
 }
 
@@ -350,6 +497,11 @@ fn toggle_window(app: &AppHandle) {
 	let Some(window) = main_window(app) else {
 		return;
 	};
+	// Zwykłe okno: klik w ikonę zawsze je wyciąga na wierzch (chowa się krzyżykiem albo minimalizacją).
+	if state(app).settings.lock().unwrap().window_mode {
+		show_window(app);
+		return;
+	}
 	let recently_hidden = state(app).hidden_by_blur_at.lock().unwrap().is_some_and(|at| at.elapsed() < Duration::from_millis(300));
 	if window.is_visible().unwrap_or(false) {
 		let _ = window.hide();
@@ -405,15 +557,23 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
 	match event {
 		WindowEvent::Focused(false) => {
 			let devtools_open = main_window(app).is_some_and(|window| window.is_devtools_open());
+			let settings = *state(app).settings.lock().unwrap();
+			let pinned = settings.pinned || settings.window_mode;
 			// Okno nie ma ramki: chwycenie krawędzi do zmiany rozmiaru zabiera mu fokus. Wtedy nie chowamy,
 			// a po skończonym przeciąganiu oddajemy fokus, żeby klik obok znów chował panel.
-			if !devtools_open && cursor_at_edge(window) {
+			if !devtools_open && !pinned && cursor_at_edge(window) {
 				return_focus_after_resize(app.clone());
 				return;
 			}
-			if !devtools_open && window.is_visible().unwrap_or(false) {
+			if !devtools_open && !pinned && window.is_visible().unwrap_or(false) {
 				*state(app).hidden_by_blur_at.lock().unwrap() = Some(Instant::now());
 				let _ = window.hide();
+			}
+		}
+		// Podgląd zdjęcia zajmuje cały obszar roboczy; tego położenia i rozmiaru nie zapamiętujemy.
+		WindowEvent::Moved(_) | WindowEvent::Resized(_) if state(app).settings.lock().unwrap().window_mode => {
+			if window.is_visible().unwrap_or(false) && !*state(app).media_open.lock().unwrap() {
+				save_geometry(app, window);
 			}
 		}
 		WindowEvent::Resized(size) if window.is_visible().unwrap_or(false) && !*state(app).media_open.lock().unwrap() && size.width > 0 => {
@@ -445,6 +605,8 @@ fn create_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
 		.shadow(false)
 		.skip_taskbar(true)
 		.always_on_top(true)
+		// Przezroczyste okno: tło przypiętego, nieużywanego panelu prześwituje (page/style.css, messy-dim).
+		.transparent(true)
 		.initialization_script(page_script())
 		.on_new_window(move |url, features| {
 			if is_call_window(&url) {
@@ -552,7 +714,7 @@ fn main() {
 		.plugin(tauri_plugin_notification::init())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_updater::Builder::new().build())
-		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen])
+		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window])
 		.on_window_event(on_window_event)
 		.setup(|app| {
 			let handle = app.handle();
@@ -564,6 +726,7 @@ fn main() {
 				tray_rect: Mutex::new(None),
 				media_open: Mutex::new(false),
 				resized_at: Mutex::new(None),
+				drag_origin: Mutex::new(None),
 			});
 
 			// Uruchamianie z Windowsem włączamy przy pierwszym starcie zainstalowanej aplikacji,
