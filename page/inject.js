@@ -349,7 +349,7 @@
 		const isBack = event => event.button === 3;
 		const isSideButton = event => event.button === 3 || event.button === 4;
 		const inThread = () => /\/(messages|messages\/e2ee)\/t\//.test(location.pathname);
-		for (const name of ['pointerdown', 'mousedown', 'pointerup', 'auxclick']) {
+		for (const name of ['pointerdown', 'mousedown', 'mouseup', 'auxclick']) {
 			document.addEventListener(name, event => {
 				if (isSideButton(event) && !mediaOpen) {
 					event.preventDefault();
@@ -357,7 +357,8 @@
 				}
 			}, true);
 		}
-		document.addEventListener('mouseup', event => {
+		// Akcja na auxclick: po zablokowanym pointerdown przeglądarka nie wysyła mouseup ani pointerup.
+		document.addEventListener('auxclick', event => {
 			if (!isSideButton(event) || mediaOpen) {
 				return;
 			}
@@ -385,7 +386,7 @@
 
 		// Esc chowa okno do zasobnika, chyba że zamyka coś na stronie (menu, okno dialogowe, podgląd zdjęć).
 		window.addEventListener('keydown', event => {
-			if (event.key !== 'Escape' || event.defaultPrevented || mediaOpen || document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]')) {
+			if (event.key !== 'Escape' || event.defaultPrevented || mediaOpen || [...document.querySelectorAll('[role="dialog"], [role="menu"], [role="listbox"]')].some(open => open.getBoundingClientRect().width > 0)) {
 				return;
 			}
 			window.messy.hideWindow();
