@@ -382,6 +382,59 @@
 			}
 		}, true);
 
+		// Błąd Facebooka: w wąskim oknie bez otwartej rozmowy (/messages/) lista czatów jest ukryta, a całe okno
+		// zajmuje „Nie wybrano czatów”. W dobrym stanie (po „Wstecz” Facebooka) oba kontenery mają zamienione
+		// klasy, więc zamieniamy je sami. Po otwarciu rozmowy cofamy zamianę, bo React pamięta swoje klasy
+		// i sam by ich nie poprawił.
+		let swapped = null;
+		function swapClasses(pair) {
+			const [a, b] = pair;
+			const c = a.className;
+			a.className = b.className;
+			b.className = c;
+		}
+		function fixEmptyList() {
+			if (swapped && (inThread() || !swapped.every(element => element.isConnected))) {
+				if (swapped.every(element => element.isConnected)) {
+					swapClasses(swapped);
+				}
+				swapped = null;
+			}
+			if (swapped || inThread()) {
+				return;
+			}
+			const nav = document.querySelector('[role="navigation"] [role="row"]')?.closest('[role="navigation"]');
+			const main = document.querySelector('[role="main"]');
+			if (!nav || !main) {
+				return;
+			}
+			let common = main;
+			while (common && !common.contains(nav)) {
+				common = common.parentElement;
+			}
+			const branch = element => {
+				while (element.parentElement !== common) {
+					element = element.parentElement;
+				}
+				return element;
+			};
+			const list = branch(nav);
+			const chat = branch(main);
+			if (getComputedStyle(list).visibility === 'hidden' && chat.getBoundingClientRect().width >= innerWidth - 1) {
+				swapped = [list, chat];
+				swapClasses(swapped);
+			}
+		}
+		new MutationObserver(fixEmptyList).observe(document.body, {childList: true, subtree: true});
+		// Po zmianie szerokości układ Facebooka może być inny, więc zaczynamy od jego własnych klas.
+		window.addEventListener('resize', () => {
+			if (swapped?.every(element => element.isConnected)) {
+				swapClasses(swapped);
+			}
+			swapped = null;
+			fixEmptyList();
+		});
+
 		// Esc chowa okno do zasobnika, chyba że zamyka coś na stronie (menu, okno dialogowe, podgląd zdjęć).
 		window.addEventListener('keydown', event => {
 			if (event.key !== 'Escape' || event.defaultPrevented || mediaOpen || [...document.querySelectorAll('[role="dialog"], [role="menu"], [role="listbox"]')].some(open => open.getBoundingClientRect().width > 0)) {
