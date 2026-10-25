@@ -271,6 +271,16 @@ fn is_allowed_in_app(url: &url::Url) -> bool {
 	path == "/" || ALLOWED.iter().any(|prefix| path.starts_with(prefix))
 }
 
+fn is_facebook(url: &url::Url) -> bool {
+	url.host_str().is_some_and(|host| host == "facebook.com" || host.ends_with(".facebook.com"))
+}
+
+// Strony logowania i weryfikacji: dozwolone w panelu, ale nie czaty. Podgląd zdjęć (/messenger_media)
+// i inne strony Facebooka się nie liczą, z nich linki dalej idą do przeglądarki.
+fn is_login_page(url: &url::Url) -> bool {
+	is_allowed_in_app(url) && !url.path().starts_with("/messages")
+}
+
 // Panel nad zasobnikiem: przy prawej krawędzi obszaru roboczego, tuż nad paskiem zadań.
 fn position_window(app: &AppHandle, window: &WebviewWindow) {
 	let Some(rect) = *state(app).tray_rect.lock().unwrap() else {
@@ -379,6 +389,17 @@ fn create_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
 		.on_navigation(move |url| {
 			if is_allowed_in_app(url) || url.scheme() == "about" {
 				return true;
+			}
+			// Po kodzie z weryfikacji (np. z WhatsAppa) Facebook przekierowuje na adres spoza listy.
+			// W trakcie logowania nie oddajemy go przeglądarce, tylko wracamy do czatów w panelu.
+			if is_facebook(url) && main_window(&navigator).is_some_and(|window| window.url().is_ok_and(|current| is_login_page(&current))) {
+				let app = navigator.clone();
+				tauri::async_runtime::spawn(async move {
+					if let Some(window) = main_window(&app) {
+						let _ = window.navigate(MESSENGER_URL.parse().unwrap());
+					}
+				});
+				return false;
 			}
 			let _ = navigator.opener().open_url(url.as_str(), None::<&str>);
 			false
