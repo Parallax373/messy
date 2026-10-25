@@ -12,6 +12,7 @@
 	const BELL = 'M10 2a5.5 5.5 0 0 0-5.5 5.5v2.74l-1.4 2.8A1 1 0 0 0 4 14.5h12a1 1 0 0 0 .9-1.46l-1.4-2.8V7.5A5.5 5.5 0 0 0 10 2zm-2.45 13.75a2.5 2.5 0 0 0 4.9 0h-4.9z';
 	const BELL_OFF = 'M2.22 2.22a.75.75 0 0 1 1.06 0l14.5 14.5a.75.75 0 1 1-1.06 1.06l-2.22-2.22H4a1 1 0 0 1-.9-1.46l1.4-2.8V7.5c0-.86.2-1.68.55-2.4L2.22 3.28a.75.75 0 0 1 0-1.06zM10 2a5.5 5.5 0 0 1 5.5 5.5v2.74l1.03 2.06L7.2 2.97A5.48 5.48 0 0 1 10 2zm-2.45 13.75a2.5 2.5 0 0 0 4.9 0h-4.9z';
 	const MOON = 'M8.2 2.1a.75.75 0 0 1 .17.83A6.25 6.25 0 0 0 17.07 11.6a.75.75 0 0 1 1 .9A8 8 0 1 1 7.5 1.93a.75.75 0 0 1 .7.17z';
+	const PANEL = 'M3 4.75A1.75 1.75 0 0 1 4.75 3h10.5A1.75 1.75 0 0 1 17 4.75v10.5A1.75 1.75 0 0 1 15.25 17H4.75A1.75 1.75 0 0 1 3 15.25V4.75zM4.5 12v3.25c0 .14.11.25.25.25h10.5a.25.25 0 0 0 .25-.25V12h-11z';
 	const PIN = 'M12.6 2.2a.75.75 0 0 1 1.06 0l4.14 4.14a.75.75 0 0 1 0 1.06l-1.5 1.5a.75.75 0 0 1-.8.17l-2.6 2.6.3 2.84a.75.75 0 0 1-.21.6l-1.2 1.2a.75.75 0 0 1-1.06 0L7.5 13.06l-4.22 4.22a.75.75 0 0 1-1.06-1.06L6.44 12 3.2 8.76a.75.75 0 0 1 0-1.06l1.2-1.2a.75.75 0 0 1 .6-.22l2.85.3 2.6-2.6a.75.75 0 0 1 .17-.8l1.98-1.98z';
 
 	// Przyciski w kolejności od lewej; każdy przełącza jedno ustawienie.
@@ -33,9 +34,11 @@
 		{
 			id: 'messy-pin-button',
 			key: 'pinned',
-			label: on => on ? strings.pinOn : strings.pinOff,
-			icon: () => PIN,
-			dimmed: on => !on,
+			// W trybie okna pinezka nie ma sensu, więc ten przycisk przełącza z powrotem na panel.
+			label: on => settings.window_mode ? strings.backToPanel : on ? strings.pinOn : strings.pinOff,
+			icon: () => settings.window_mode ? PANEL : PIN,
+			dimmed: on => !settings.window_mode && !on,
+			toggle: () => settings.window_mode ? window.messy.setSetting('window_mode', false) : window.messy.setSetting('pinned', !settings.pinned),
 		},
 	];
 
@@ -143,7 +146,7 @@
 				button.addEventListener('click', async event => {
 					event.preventDefault();
 					event.stopPropagation();
-					await window.messy.setSetting(spec.key, !settings[spec.key]);
+					await (spec.toggle ? spec.toggle() : window.messy.setSetting(spec.key, !settings[spec.key]));
 				});
 
 				render(button, spec);
@@ -211,7 +214,7 @@
 			button.addEventListener('click', async event => {
 				event.preventDefault();
 				event.stopPropagation();
-				await window.messy.setSetting('pinned', !settings.pinned);
+				await PIN_SPEC.toggle();
 			});
 			render(button, PIN_SPEC);
 			cell.before(clone);
@@ -338,6 +341,32 @@
 				swallowContextMenu = false;
 				event.preventDefault();
 				event.stopPropagation();
+			}
+		}, true);
+
+		// Boczne przyciski myszy: „wstecz” z otwartej rozmowy wraca do listy czatów (zamiast skakać po historii
+		// między rozmowami), „dalej” nic nie robi. Podglądu zdjęć nie ruszamy, tam „wstecz” go zamyka.
+		const isBack = event => event.button === 3;
+		const isSideButton = event => event.button === 3 || event.button === 4;
+		const inThread = () => /\/(messages|messages\/e2ee)\/t\//.test(location.pathname);
+		for (const name of ['pointerdown', 'mousedown', 'pointerup', 'auxclick']) {
+			document.addEventListener(name, event => {
+				if (isSideButton(event) && !mediaOpen) {
+					event.preventDefault();
+					event.stopPropagation();
+				}
+			}, true);
+		}
+		document.addEventListener('mouseup', event => {
+			if (!isSideButton(event) || mediaOpen) {
+				return;
+			}
+			event.preventDefault();
+			event.stopPropagation();
+			if (isBack(event) && inThread()) {
+				// Router Facebooka czyta adres przy popstate, więc lista otwiera się bez przeładowania strony.
+				history.pushState(null, '', '/messages/');
+				window.dispatchEvent(new PopStateEvent('popstate', {state: null}));
 			}
 		}, true);
 

@@ -36,6 +36,7 @@ pub struct PageStrings {
 	pub mute_off: &'static str,
 	pub pin_on: &'static str,
 	pub pin_off: &'static str,
+	pub back_to_panel: &'static str,
 	pub update: &'static str,
 	pub update_hint: &'static str,
 }
@@ -70,6 +71,7 @@ const PL: Strings = Strings {
 		mute_off: "Wycisz powiadomienia",
 		pin_on: "Odepnij panel (wróci nad zasobnik)",
 		pin_off: "Przypnij panel (zostaje na wierzchu, przeciągasz prawym przyciskiem)",
+		back_to_panel: "Wróć do panelu nad zasobnikiem",
 		update: "Zaktualizuj do {version}",
 		update_hint: "Zaktualizuj do {version} (uruchomi ponownie Messy)",
 	},
@@ -104,6 +106,7 @@ const EN: Strings = Strings {
 		mute_off: "Mute notifications",
 		pin_on: "Unpin panel (goes back above the tray)",
 		pin_off: "Pin panel (stays on top, drag with the right mouse button)",
+		back_to_panel: "Back to the panel above the tray",
 		update: "Update to {version}",
 		update_hint: "Update to {version} (restarts Messy)",
 	},
