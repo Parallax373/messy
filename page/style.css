@@ -3,7 +3,9 @@
    więc nadpisujemy je na każdym elemencie, żeby czat wypełniał okno bez odstępów. */
 div[role="banner"] { display: none !important; }
 * { --header-height: 0px !important; --messenger-card-spacing: 0px !important; }
-html { overflow: hidden !important; }
+/* Pasek przewijania całej strony jest zbędny (przewija się lista czatów). Facebook wymusza go klasą
+   (._9dls { overflow-y: scroll !important }), więc selektor musi być mocniejszy niż sama klasa. */
+html:root { overflow: hidden !important; }
 /* Podgląd zdjęć centruje swój górny pasek (zamknij, pobierz) w --header-height; przy zerze wyjeżdża ponad okno. */
 [role="dialog"], [role="dialog"] * { --header-height: 56px !important; }
 
