@@ -78,3 +78,5 @@ html.messy-dim [style*="--chat-composer-button-color"] { background-image: none 
 html.messy-no-video .messy-video-cell { display: none !important; }
 /* W trybie zwykłego okna pinezka nic nie robi; w nagłówku rozmowy page/inject.js w ogóle jej wtedy nie wstawia. */
 html.messy-window-mode .messy-cell:has(#messy-pin-button) { display: none !important; }
+/* Włączona pinezka (page/inject.js, klasa messy-on). */
+.messy-on { box-shadow: inset 0 0 0 2px #0866ff !important; border-radius: 50% !important; }

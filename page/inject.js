@@ -106,6 +106,8 @@
 			path.setAttribute('d', spec.icon(on));
 			path.setAttribute('fill-rule', 'evenodd');
 			button.style.opacity = spec.dimmed(on) ? '0.55' : '';
+			// Przypięty panel: wyraźna obwódka, sama jaśniejsza ikona była prawie niewidoczna.
+			button.classList.toggle('messy-on', spec.key === 'pinned' && on);
 		}
 
 		// Motyw: Facebook oznacza ciemne i jasne fragmenty klasami __fb-dark-mode / __fb-light-mode (zmienne
@@ -135,9 +137,8 @@
 					render(button, spec);
 				}
 			}
-			const threadPin = document.getElementById('messy-thread-pin');
-			if (threadPin) {
-				render(threadPin, BUTTONS.find(spec => spec.key === 'pinned'));
+			for (const button of document.querySelectorAll('[data-messy-key]')) {
+				render(button, BUTTONS.find(spec => spec.key === button.dataset.messyKey));
 			}
 		}
 
@@ -207,7 +208,24 @@
 				video.classList.add('messy-video-cell');
 			}
 		}
-		const PIN_SPEC = BUTTONS.find(spec => spec.key === 'pinned');
+		// Przyciski Messy w nagłówku rozmowy, przed przyciskiem informacji. Pinezka zawsze w trybie panelu; motyw,
+		// wyciszenie i tryb tylko wtedy, gdy nagłówka „Czaty” nie widać (wąskie okno) i zmieszczą się obok tytułu.
+		const THREAD_EXTRA = ['light', 'muted', 'window_mode'];
+		function threadKeys(info) {
+			const keys = settings.window_mode ? [] : ['pinned'];
+			const listHeader = document.getElementById('messy-mode-button');
+			if (listHeader && listHeader.getBoundingClientRect().width > 0) {
+				return keys;
+			}
+			// Miejsce: od lewej krawędzi rozmowy do przycisku informacji, minus „Wstecz”, tytuł (min. 160 px)
+			// i przyciski Facebooka w tym samym rzędzie; każdy przycisk zajmuje ok. 44 px.
+			const main = document.querySelector('[role="main"]')?.getBoundingClientRect();
+			const row = cellOf(info).parentElement;
+			const facebookButtons = [...row.children].filter(cell => !cell.classList.contains('messy-cell') && cell.getBoundingClientRect().width > 0).length - 1;
+			const room = main ? info.getBoundingClientRect().left - main.left - 60 - 160 - facebookButtons * 44 - keys.length * 44 : 0;
+			const extra = THREAD_EXTRA.slice(Math.max(0, THREAD_EXTRA.length - Math.floor(room / 44)));
+			return [...extra, ...keys];
+		}
 		function ensureThreadPin() {
 			const info = [...document.querySelectorAll('[role="button"][aria-expanded]:not([aria-controls])')]
 				.filter(button => {
@@ -215,39 +233,45 @@
 					return rect.width >= 28 && rect.width <= 48 && rect.top >= 0 && rect.top < 80;
 				})
 				.sort((a, b) => b.getBoundingClientRect().left - a.getBoundingClientRect().left)[0];
-			if (info) {
-				markVideoCall(cellOf(info));
-			}
-			const existing = document.getElementById(THREAD_PIN_ID);
-			// W trybie okna pinezka nic nie robi.
-			if (settings.window_mode) {
-				existing?.closest('.messy-cell')?.remove();
+			if (!info) {
 				return;
 			}
-			if (!strings || !info || (existing && existing.isConnected && existing.getBoundingClientRect().width > 0)) {
+			const infoCell = cellOf(info);
+			markVideoCall(infoCell);
+			if (!strings) {
 				return;
 			}
-			existing?.closest('.messy-cell')?.remove();
-
-			const cell = cellOf(info);
-			// Kopia przycisku informacji: ten sam wygląd i kolor motywu rozmowy, tylko ikona pinezki.
-			const clone = cell.cloneNode(true);
-			clone.classList.add('messy-cell');
-			const button = clone.querySelector('[role="button"]') ?? clone;
-			button.id = THREAD_PIN_ID;
-			button.removeAttribute('aria-expanded');
-			const svg = button.querySelector('svg');
-			if (svg) {
-				svg.setAttribute('viewBox', '0 0 36 36');
-				svg.innerHTML = '<g transform="translate(18,18)scale(1.35)translate(-10,-10)"><path fill="var(--mwp-header-button-color)"></path></g>';
+			const current = [...document.querySelectorAll('[data-messy-key]')];
+			const keys = threadKeys(info);
+			const same = current.length === keys.length && current.every((button, i) => button.dataset.messyKey === keys[i] && button.isConnected && button.getBoundingClientRect().width > 0);
+			if (same) {
+				return;
 			}
-			button.addEventListener('click', async event => {
-				event.preventDefault();
-				event.stopPropagation();
-				await window.messy.setSetting('pinned', !settings.pinned);
-			});
-			render(button, PIN_SPEC);
-			cell.before(clone);
+			for (const button of current) {
+				button.closest('.messy-cell')?.remove();
+			}
+			for (const key of keys) {
+				const spec = BUTTONS.find(spec => spec.key === key);
+				// Kopia przycisku informacji: ten sam wygląd i kolor motywu rozmowy, tylko inna ikona.
+				const clone = infoCell.cloneNode(true);
+				clone.classList.add('messy-cell');
+				const button = clone.querySelector('[role="button"]') ?? clone;
+				button.id = key === 'pinned' ? THREAD_PIN_ID : 'messy-thread-' + key;
+				button.dataset.messyKey = key;
+				button.removeAttribute('aria-expanded');
+				const svg = button.querySelector('svg');
+				if (svg) {
+					svg.setAttribute('viewBox', '0 0 36 36');
+					svg.innerHTML = '<g transform="translate(18,18)scale(1.35)translate(-10,-10)"><path fill="var(--mwp-header-button-color)"></path></g>';
+				}
+				button.addEventListener('click', async event => {
+					event.preventDefault();
+					event.stopPropagation();
+					await window.messy.setSetting(key, !settings[key]);
+				});
+				render(button, spec);
+				infoCell.before(clone);
+			}
 		}
 		new MutationObserver(ensureThreadPin).observe(document.body, {childList: true, subtree: true});
 
