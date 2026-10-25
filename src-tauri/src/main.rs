@@ -473,7 +473,9 @@ fn is_login_page(url: &url::Url) -> bool {
 
 // Panel nad zasobnikiem: przy prawej krawędzi obszaru roboczego, tuż nad paskiem zadań.
 fn position_window(app: &AppHandle, window: &WebviewWindow) {
-	let Some(rect) = *state(app).tray_rect.lock().unwrap() else {
+	// Położenie ikony zapamiętuje klik w nią; przed pierwszym klikiem (np. okno pokazane przy starcie) pytamy samą ikonę.
+	let rect = *state(app).tray_rect.lock().unwrap();
+	let Some(rect) = rect.or_else(|| app.tray_by_id(TRAY_ID)?.rect().ok().flatten()) else {
 		return;
 	};
 	let scale = window.scale_factor().unwrap_or(1.0);
