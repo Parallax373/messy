@@ -489,6 +489,44 @@
 			fixEmptyList();
 		});
 
+		// Błąd Facebooka: okienko emoji (i podobne) otwiera się pod przyciskiem w polu wiadomości, czyli poza
+		// dolną krawędzią okna albo na polu wiadomości. Taką warstwę przypinamy dolną krawędzią nad polem wiadomości
+		// (treść okienka doładowuje się później i wtedy rośnie w górę, a nie znowu za krawędź).
+		// Facebook przy każdym odświeżeniu okienka ustawia styl warstwy od nowa, więc pilnujemy jej atrybutu style.
+		const watchedLayers = new WeakSet();
+		function fixOffscreenPopups() {
+			for (const dialog of document.querySelectorAll('[role="dialog"]')) {
+				let layer = dialog;
+				while (layer && !(layer.style.position === 'absolute' && layer.style.top)) {
+					layer = layer.parentElement;
+				}
+				if (!layer?.offsetParent || !layer.style.top.endsWith('px')) {
+					continue;
+				}
+				if (!watchedLayers.has(layer)) {
+					watchedLayers.add(layer);
+					new MutationObserver(fixOffscreenPopups).observe(layer, {attributes: true, attributeFilter: ['style']});
+				}
+				// Nad polem wiadomości (i przyciskiem, który otworzył okienko), żeby było widać, co się pisze.
+				const tops = [...document.querySelectorAll('[aria-expanded="true"], [role="textbox"][contenteditable="true"]')]
+					.map(element => element.getBoundingClientRect())
+					.filter(rect => rect.height > 0 && rect.top > innerHeight / 2)
+					.map(rect => rect.top);
+				const above = (tops.length ? Math.min(...tops) : innerHeight) - 8;
+				const box = dialog.getBoundingClientRect();
+				if (box.height === 0 || box.bottom <= above + 1) {
+					continue;
+				}
+				const parent = layer.offsetParent.getBoundingClientRect();
+				layer.classList.add('messy-popup-above');
+				layer.style.top = 'auto';
+				layer.style.bottom = parent.bottom - above + 'px';
+				// Facebook przycina warstwę do miejsca pod przyciskiem; nad nim jest go więcej.
+				layer.style.maxHeight = above - 8 + 'px';
+			}
+		}
+		new MutationObserver(fixOffscreenPopups).observe(document.body, {childList: true, subtree: true});
+
 		// Esc chowa okno do zasobnika, chyba że zamyka coś na stronie (menu, okno dialogowe, podgląd zdjęć).
 		window.addEventListener('keydown', event => {
 			if (event.key !== 'Escape' || event.defaultPrevented || mediaOpen || [...document.querySelectorAll('[role="dialog"], [role="menu"], [role="listbox"]')].some(open => open.getBoundingClientRect().width > 0)) {
