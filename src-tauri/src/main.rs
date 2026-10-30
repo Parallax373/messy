@@ -34,8 +34,8 @@ const ICON_NORMAL: &[u8] = include_bytes!("../../assets/IconTray@2x.png");
 const ICON_UNREAD: &[u8] = include_bytes!("../../assets/IconTrayUnread@2x.png");
 
 // Wersja deweloperska (npm start) ma znaczek „DEV” w rogu panelu i w dymku ikony,
-// żeby nie pomylić jej z zainstalowaną.
-const DEV_BADGE_CSS: &str = "\nhtml::after { content: 'DEV'; position: fixed; left: 6px; bottom: 6px; z-index: 2147483647; \
+// żeby nie pomylić jej z zainstalowaną. Na ::before, bo ::after to obwódka okna (page/style.css).
+const DEV_BADGE_CSS: &str = "\nhtml::before { content: 'DEV'; position: fixed; left: 6px; bottom: 6px; z-index: 2147483647; \
 	padding: 1px 6px; border-radius: 4px; background: #e8710a; color: #fff; font: 700 10px/16px system-ui, sans-serif; \
 	letter-spacing: .5px; pointer-events: none; opacity: .9; }\n";
 
