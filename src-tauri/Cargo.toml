@@ -20,6 +20,8 @@ sys-locale = "0.3"
 tokio = { version = "1", features = ["time"] }
 url = "2"
 webview2-com = "0.39"
+# DwmFlush: animacja okna w trybie krawędzi zsynchronizowana z odświeżaniem monitora. Wersja ta sama co w wry.
+windows = { version = "0.62", features = ["Win32_Graphics_Dwm"] }
 
 [profile.release]
 codegen-units = 1

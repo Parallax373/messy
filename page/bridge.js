@@ -6,7 +6,7 @@
 	}
 
 	const invoke = (command, args) => window.__TAURI_INTERNALS__.invoke(command, args);
-	const listeners = {'settings-changed': [], 'update-ready': [], 'back-to-list': []};
+	const listeners = {'settings-changed': [], 'update-ready': [], 'back-to-list': [], 'edge-state': []};
 
 	// Messy wywołuje to przez eval, gdy zmieni się ustawienie albo stan aktualizacji.
 	window.__messyEmit = (name, value) => {
@@ -29,6 +29,10 @@
 		// phase: 'start' | 'move' | 'end'; dx, dy: przesunięcie kursora od początku w pikselach fizycznych.
 		dragWindow: (phase, dx = 0, dy = 0) => void invoke('drag_window', {phase, dx, dy}),
 		hideWindow: () => void invoke('hide_window'),
+		// Pole tekstowe ma fokus (okno przy krawędzi wtedy się nie chowa).
+		setTyping: on => void invoke('set_typing', {on}),
+		// {edge: 'left'|'right'|'top'|'bottom'|null, expanded: boolean}; edge null poza trybem krawędzi.
+		onEdgeState: callback => listeners['edge-state'].push(callback),
 		onSettingsChange: callback => listeners['settings-changed'].push(callback),
 		// Okno było długo schowane w rozmowie (src-tauri/src/main.rs, show_window).
 		onBackToList: callback => listeners['back-to-list'].push(callback),

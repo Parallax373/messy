@@ -21,6 +21,7 @@ the way Steam or Discord do. Click anywhere else and it hides.
 - **OLED mode:** true black instead of Facebook's grey dark theme
 - **Mute notifications** with one click, right in the Chats header
 - **Resizable panel** that remembers its size
+- **Edge mode:** dock Messy to any screen edge as a thin strip with the unread count; it slides out on hover (Window menu in the tray)
 - **Starts with Windows** (can be turned off in the tray menu)
 - **Updates itself** in the background
 - **Polish and English**, following your Windows language
@@ -45,6 +46,7 @@ czy Discordzie. Kliknięcie gdzie indziej go chowa.
 - **Tryb OLED:** czysta czerń zamiast szarego ciemnego motywu Facebooka
 - **Wyciszanie powiadomień** jednym kliknięciem, w nagłówku „Czaty”
 - **Zmiana rozmiaru panelu**, zapamiętywana
+- **Tryb krawędzi:** Messy przyklejony do dowolnej krawędzi ekranu jako wąski pasek z licznikiem nieprzeczytanych, wysuwa się po najechaniu (menu „Okno” w zasobniku)
 - **Uruchamianie z Windowsem** (można wyłączyć w menu ikony)
 - **Sam się aktualizuje** w tle
 - **Polski i angielski**, zależnie od języka Windowsa

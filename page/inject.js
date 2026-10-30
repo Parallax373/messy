@@ -127,7 +127,7 @@
 			settings = value;
 			document.documentElement.classList.toggle('messy-oled', settings.oled);
 			document.documentElement.classList.toggle('messy-no-video', settings.hide_video_call);
-			document.documentElement.classList.toggle('messy-window-mode', settings.window_mode);
+			document.documentElement.classList.toggle('messy-window-mode', settings.window_mode || settings.edge_mode);
 			applyTheme();
 			updateDim();
 			ensureThreadPin();
@@ -212,7 +212,7 @@
 		// wyciszenie i tryb tylko wtedy, gdy nagłówka „Czaty” nie widać (wąskie okno) i zmieszczą się obok tytułu.
 		const THREAD_EXTRA = ['light', 'muted', 'window_mode'];
 		function threadKeys(info) {
-			const keys = settings.window_mode ? [] : ['pinned'];
+			const keys = settings.window_mode || settings.edge_mode ? [] : ['pinned'];
 			const listHeader = document.getElementById('messy-mode-button');
 			if (listHeader?.checkVisibility({visibilityProperty: true})) {
 				return keys;
@@ -289,6 +289,64 @@
 
 		setInterval(reportUnread, 2000);
 		reportUnread();
+
+		// Tryb krawędzi: wąski pasek po stronie zwróconej do środka ekranu, widoczny gdy okno jest schowane.
+		// Pokazuje liczbę nieprzeczytanych i miga, gdy przybywa nowych.
+		const STRIP_ID = 'messy-edge-strip';
+		let edgeState = {edge: null, expanded: true};
+		function renderStrip() {
+			let strip = document.getElementById(STRIP_ID);
+			// Schowane okno: strona znika (okno jest przezroczyste), zostaje sama zakładka.
+			document.documentElement.classList.toggle('messy-edge-collapsed', Boolean(edgeState.edge && !edgeState.expanded));
+			if (!edgeState.edge) {
+				strip?.remove();
+				return;
+			}
+			if (!strip) {
+				strip = document.createElement('div');
+				strip.id = STRIP_ID;
+				strip.innerHTML = '<div class="messy-edge-grip"></div><div class="messy-edge-badge"></div>';
+				strip.addEventListener('animationend', () => strip.classList.remove('blink'));
+				document.body.append(strip);
+			}
+			strip.dataset.edge = edgeState.edge;
+			strip.classList.toggle('messy-edge-shown', !edgeState.expanded);
+			const badge = strip.querySelector('.messy-edge-badge');
+			badge.textContent = lastUnread > 99 ? '99+' : String(lastUnread);
+			badge.hidden = lastUnread === 0;
+		}
+		window.messy.onEdgeState(value => {
+			edgeState = value;
+			renderStrip();
+		});
+		let stripUnread = 0;
+		setInterval(() => {
+			if (lastUnread > stripUnread && edgeState.edge && !edgeState.expanded) {
+				const strip = document.getElementById(STRIP_ID);
+				if (strip) {
+					strip.classList.remove('blink');
+					void strip.offsetWidth;
+					strip.classList.add('blink');
+				}
+			}
+			if (lastUnread !== stripUnread) {
+				stripUnread = lastUnread;
+				renderStrip();
+			}
+		}, 500);
+
+		// Piszesz w polu tekstowym: okno przy krawędzi nie chowa się po zjechaniu kursorem.
+		const isEditable = element => element instanceof HTMLElement && (element.isContentEditable || /^(INPUT|TEXTAREA)$/.test(element.tagName));
+		document.addEventListener('focusin', event => {
+			if (isEditable(event.target)) {
+				window.messy.setTyping(true);
+			}
+		});
+		document.addEventListener('focusout', event => {
+			if (isEditable(event.target)) {
+				window.messy.setTyping(false);
+			}
+		});
 
 		// Zielony przycisk „Zaktualizuj” przed pozostałymi, widoczny tylko gdy aktualizacja jest pobrana.
 		const UPDATE_ID = 'messy-update-button';
