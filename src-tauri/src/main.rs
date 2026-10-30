@@ -3,9 +3,11 @@
 
 mod i18n;
 mod updater;
+mod upload;
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -14,7 +16,7 @@ use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::webview::NewWindowResponse;
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, Rect, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent, Wry};
+use tauri::{AppHandle, Manager, Monitor, PhysicalPosition, PhysicalSize, Rect, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent, Wry};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_opener::OpenerExt;
 
@@ -28,14 +30,18 @@ const MARGIN: f64 = 8.0;
 const TRAY_ID: &str = "tray";
 // Po tylu minutach w ukryciu panel otwiera się na liście czatów, a nie w ostatniej rozmowie.
 const BACK_TO_LIST_AFTER: Duration = Duration::from_secs(10 * 60);
+// Tryb krawędzi: tyle pikseli logicznych okna zostaje widoczne na ekranie, gdy jest schowane.
+const EDGE_STRIP: f64 = 16.0;
+// Tak długo kursor musi być poza oknem, zanim schowa się przy krawędzi.
+const EDGE_HIDE_DELAY: Duration = Duration::from_millis(600);
 
 // Przy nieprzeczytanych dymek w ikonie robi się czerwony (assets/icon-unread.svg).
 const ICON_NORMAL: &[u8] = include_bytes!("../../assets/IconTray@2x.png");
 const ICON_UNREAD: &[u8] = include_bytes!("../../assets/IconTrayUnread@2x.png");
 
 // Wersja deweloperska (npm start) ma znaczek „DEV” w rogu panelu i w dymku ikony,
-// żeby nie pomylić jej z zainstalowaną.
-const DEV_BADGE_CSS: &str = "\nhtml::after { content: 'DEV'; position: fixed; left: 6px; bottom: 6px; z-index: 2147483647; \
+// żeby nie pomylić jej z zainstalowaną. Na ::before, bo ::after to obwódka okna (page/style.css).
+const DEV_BADGE_CSS: &str = "\nhtml::before { content: 'DEV'; position: fixed; left: 6px; bottom: 6px; z-index: 2147483647; \
 	padding: 1px 6px; border-radius: 4px; background: #e8710a; color: #fff; font: 700 10px/16px system-ui, sans-serif; \
 	letter-spacing: .5px; pointer-events: none; opacity: .9; }\n";
 
@@ -67,13 +73,18 @@ struct Settings {
 	translucent: bool,
 	// Zwykłe okno z ramką i paskiem zadań zamiast panelu nad zasobnikiem (np. na drugim monitorze).
 	window_mode: bool,
+	// Okno przyklejone do krawędzi ekranu: schowane do wąskiego paska, wysuwa się po najechaniu.
+	// Wyklucza się z trybem okna.
+	edge_mode: bool,
 	// Bez przycisku rozmowy wideo w nagłówku rozmowy.
 	hide_video_call: bool,
+	// Pliki ponad limit Messengera idą do Gofile bez pytania (page/inject.js, „Nie pytaj więcej”).
+	auto_upload: bool,
 }
 
 impl Default for Settings {
 	fn default() -> Self {
-		Settings { muted: false, light: false, oled: false, pinned: false, translucent: true, window_mode: false, hide_video_call: false }
+		Settings { muted: false, light: false, oled: false, pinned: false, translucent: true, window_mode: false, edge_mode: false, hide_video_call: false, auto_upload: false }
 	}
 }
 
@@ -100,6 +111,34 @@ struct AppState {
 	resized_at: Mutex<Option<Instant>>,
 	// Położenie okna w chwili rozpoczęcia przeciągania prawym przyciskiem.
 	drag_origin: Mutex<Option<PhysicalPosition<i32>>>,
+	// Tryb krawędzi: okno jest wysunięte (true) albo schowane do paska (false).
+	edge_expanded: Mutex<bool>,
+	// Od kiedy kursor jest poza wysuniętym oknem; po EDGE_HIDE_DELAY okno się chowa.
+	edge_leave_at: Mutex<Option<Instant>>,
+	// Strona ma fokus w polu tekstowym; wtedy okno się nie chowa.
+	page_typing: Mutex<bool>,
+	// Numer ostatniej animacji; nowsza przerywa starszą.
+	slide_generation: AtomicU64,
+}
+
+// Krawędź ekranu, przy której stoi okno w trybie krawędzi.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum Edge {
+	Left,
+	Right,
+	Top,
+	Bottom,
+}
+
+// Zapamiętane miejsce okna w trybie krawędzi (edge-dock.json).
+#[derive(Serialize, Deserialize, Clone, Copy)]
+struct EdgeDock {
+	edge: Edge,
+	// Położenie okna wzdłuż krawędzi w pikselach fizycznych: y dla lewej i prawej, x dla górnej i dolnej.
+	offset: i32,
+	// Lewy górny róg monitora, na którym stoi okno.
+	monitor: (i32, i32),
 }
 
 fn config_file(app: &AppHandle, name: &str) -> PathBuf {
@@ -141,17 +180,34 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 			"oled" => settings.oled = value,
 			"pinned" => settings.pinned = value,
 			"translucent" => settings.translucent = value,
-			"window_mode" => settings.window_mode = value,
+			"window_mode" => {
+				settings.window_mode = value;
+				if value {
+					settings.edge_mode = false;
+				}
+			}
+			"edge_mode" => {
+				settings.edge_mode = value;
+				if value {
+					settings.window_mode = false;
+				}
+			}
 			"hide_video_call" => settings.hide_video_call = value,
+			"auto_upload" => settings.auto_upload = value,
 			_ => return,
 		}
 		*settings
 	};
+	// Po włączeniu trybu krawędzi okno zaczyna schowane.
+	if key == "edge_mode" && value {
+		*state.edge_expanded.lock().unwrap() = false;
+		*state.edge_leave_at.lock().unwrap() = None;
+	}
 	write_json(app, "settings.json", &settings);
 	emit_to_page(app, "settings-changed", settings);
 	build_tray_menu(app);
 	// Odpięty panel wraca nad zasobnik.
-	if (key == "pinned" && !value) || key == "window_mode" {
+	if (key == "pinned" && !value) || key == "window_mode" || key == "edge_mode" {
 		if let Some(window) = main_window(app) {
 			restore_window(app, &window);
 		}
@@ -191,6 +247,9 @@ fn save_geometry(app: &AppHandle, window: &Window) {
 fn restore_window(app: &AppHandle, window: &WebviewWindow) {
 	let settings = *state(app).settings.lock().unwrap();
 	let window_mode = settings.window_mode;
+	state(app).slide_generation.fetch_add(1, Ordering::Relaxed);
+	emit_edge_state(app);
+	// W trybie krawędzi okno jest bez ramki, poza paskiem zadań i na wierzchu, tak samo jak panel.
 	let _ = window.set_decorations(window_mode);
 	let _ = window.set_shadow(window_mode);
 	let _ = window.set_skip_taskbar(!window_mode);
@@ -208,6 +267,10 @@ fn restore_window(app: &AppHandle, window: &WebviewWindow) {
 	if window.is_maximized().unwrap_or(false) {
 		let _ = window.unmaximize();
 	}
+	if settings.edge_mode {
+		place_on_edge(app, window);
+		return;
+	}
 	position_window(app, window);
 	// Przypięty panel otwiera się tam, gdzie go zostawiono.
 	if settings.pinned {
@@ -215,6 +278,224 @@ fn restore_window(app: &AppHandle, window: &WebviewWindow) {
 			let _ = window.set_position(PhysicalPosition::new(x, y));
 		}
 	}
+}
+
+// Tryb krawędzi: stan dla paska na stronie (page/inject.js). Poza trybem krawędzi strona dostaje edge: null.
+fn emit_edge_state(app: &AppHandle) {
+	let st = state(app);
+	if !st.settings.lock().unwrap().edge_mode {
+		emit_to_page(app, "edge-state", serde_json::json!({"edge": null, "expanded": true}));
+		return;
+	}
+	let edge = read_json::<EdgeDock>(app, "edge-dock.json").map_or(Edge::Right, |dock| dock.edge);
+	let expanded = *st.edge_expanded.lock().unwrap();
+	emit_to_page(app, "edge-state", serde_json::json!({"edge": edge, "expanded": expanded}));
+}
+
+// Monitor, przy którym stoi okno: zapamiętany, a bez zapisu ten, na którym okno jest (albo główny).
+fn dock_monitor(window: &WebviewWindow, saved: Option<&EdgeDock>) -> Option<Monitor> {
+	saved
+		.and_then(|dock| window.monitor_from_point(f64::from(dock.monitor.0), f64::from(dock.monitor.1)).ok().flatten())
+		.or_else(|| window.current_monitor().ok().flatten())
+		.or_else(|| window.primary_monitor().ok().flatten())
+}
+
+// Położenie okna o danym rozmiarze przy krawędzi: wysunięte stoi przy niej z odstępem MARGIN,
+// schowane zostawia na ekranie tylko pasek EDGE_STRIP. Bez zapisu okno stoi przy prawej krawędzi, na środku.
+fn edge_target(saved: Option<&EdgeDock>, monitor: &Monitor, size: PhysicalSize<u32>, expanded: bool) -> PhysicalPosition<i32> {
+	let scale = monitor.scale_factor();
+	let area = monitor.work_area();
+	let (area_x, area_y) = (area.position.x, area.position.y);
+	let (area_width, area_height) = (area.size.width as i32, area.size.height as i32);
+	let (width, height) = (size.width as i32, size.height as i32);
+	let margin = (MARGIN * scale).round() as i32;
+	let strip = (EDGE_STRIP * scale).round() as i32;
+	let edge = saved.map_or(Edge::Right, |dock| dock.edge);
+	// Położenie wzdłuż krawędzi, przycięte tak, żeby okno mieściło się w obszarze roboczym.
+	let along_x = saved.map_or(area_x + (area_width - width) / 2, |dock| dock.offset).min(area_x + area_width - width).max(area_x);
+	let along_y = saved.map_or(area_y + (area_height - height) / 2, |dock| dock.offset).min(area_y + area_height - height).max(area_y);
+	match edge {
+		Edge::Left => PhysicalPosition::new(if expanded { area_x + margin } else { area_x + strip - width }, along_y),
+		Edge::Right => PhysicalPosition::new(if expanded { area_x + area_width - width - margin } else { area_x + area_width - strip }, along_y),
+		Edge::Top => PhysicalPosition::new(along_x, if expanded { area_y + margin } else { area_y + strip - height }),
+		Edge::Bottom => PhysicalPosition::new(along_x, if expanded { area_y + area_height - height - margin } else { area_y + area_height - strip }),
+	}
+}
+
+// Ustawia rozmiar z zapisanego (przycięty do obszaru roboczego) i miejsce przy krawędzi, wysunięte albo schowane.
+fn place_on_edge(app: &AppHandle, window: &WebviewWindow) {
+	let saved = read_json::<EdgeDock>(app, "edge-dock.json");
+	let Some(monitor) = dock_monitor(window, saved.as_ref()) else {
+		return;
+	};
+	let scale = monitor.scale_factor();
+	let area = monitor.work_area();
+	let margin = MARGIN * scale;
+	let stored = load_size(app);
+	let width = (stored.width * scale).min(f64::from(area.size.width) - 2.0 * margin).round() as u32;
+	let height = (stored.height * scale).min(f64::from(area.size.height) - 2.0 * margin).round() as u32;
+	let size = PhysicalSize::new(width, height);
+	let expanded = *state(app).edge_expanded.lock().unwrap();
+	let _ = window.set_size(size);
+	let _ = window.set_position(edge_target(saved.as_ref(), &monitor, size, expanded));
+}
+
+// Płynnie przesuwa okno na miejsce (8 kroków co 15 ms, na początku szybko); nowsze przesunięcie przerywa starsze.
+fn slide_to(app: &AppHandle, target: PhysicalPosition<i32>) {
+	let generation = state(app).slide_generation.fetch_add(1, Ordering::Relaxed) + 1;
+	let app = app.clone();
+	// Osobny wątek, bo DwmFlush blokuje do następnej klatki ekranu (tyle klatek, ile Hz ma monitor);
+	// zwykły sleep na Windows śpi co najmniej ~15 ms, czyli ok. 64 klatki na sekundę.
+	std::thread::spawn(move || {
+		let Some(window) = main_window(&app) else {
+			return;
+		};
+		let Ok(start) = window.outer_position() else {
+			return;
+		};
+		// Ruch liczony od czasu, nie od klatek: opóźniona klatka nie wydłuża animacji, tylko ją dogania.
+		const DURATION: Duration = Duration::from_millis(280);
+		let began = Instant::now();
+		loop {
+			if state(&app).slide_generation.load(Ordering::Relaxed) != generation {
+				return;
+			}
+			let progress = (began.elapsed().as_secs_f64() / DURATION.as_secs_f64()).min(1.0);
+			// Ease-out (potęga 4): szybki start i wyraźne, długie hamowanie.
+			let eased = 1.0 - (1.0 - progress).powi(4);
+			let x = start.x + (f64::from(target.x - start.x) * eased).round() as i32;
+			let y = start.y + (f64::from(target.y - start.y) * eased).round() as i32;
+			let _ = window.set_position(PhysicalPosition::new(x, y));
+			if progress >= 1.0 {
+				break;
+			}
+			if unsafe { windows::Win32::Graphics::Dwm::DwmFlush() }.is_err() {
+				std::thread::sleep(Duration::from_millis(8));
+			}
+		}
+		emit_edge_state(&app);
+	});
+}
+
+// Wysuwa albo chowa okno przy krawędzi i daje znać stronie.
+fn set_edge_expanded(app: &AppHandle, window: &WebviewWindow, expanded: bool) {
+	let st = state(app);
+	*st.edge_expanded.lock().unwrap() = expanded;
+	*st.edge_leave_at.lock().unwrap() = None;
+	let saved = read_json::<EdgeDock>(app, "edge-dock.json");
+	if let (Some(monitor), Ok(size)) = (dock_monitor(window, saved.as_ref()), window.outer_size()) {
+		slide_to(app, edge_target(saved.as_ref(), &monitor, size, expanded));
+	}
+	// Strona przenika się z zakładką w trakcie ruchu (page/style.css), więc dostaje stan od razu.
+	emit_edge_state(app);
+}
+
+// Czy po drugiej stronie danej krawędzi monitora stoi inny monitor (okno wjeżdżałoby na jego ekran).
+fn edge_touches_monitor(window: &WebviewWindow, monitor: &Monitor, edge: Edge) -> bool {
+	let (x, y) = (monitor.position().x, monitor.position().y);
+	let (width, height) = (monitor.size().width as i32, monitor.size().height as i32);
+	let tolerance = 2;
+	window.available_monitors().unwrap_or_default().iter().any(|other| {
+		if other.position() == monitor.position() {
+			return false;
+		}
+		let (ox, oy) = (other.position().x, other.position().y);
+		let (ow, oh) = (other.size().width as i32, other.size().height as i32);
+		let overlaps_vertically = oy < y + height && oy + oh > y;
+		let overlaps_horizontally = ox < x + width && ox + ow > x;
+		match edge {
+			Edge::Left => overlaps_vertically && ox + ow <= x + tolerance && ox + ow >= x - tolerance,
+			Edge::Right => overlaps_vertically && ox >= x + width - tolerance && ox <= x + width + tolerance,
+			Edge::Top => overlaps_horizontally && oy + oh <= y + tolerance && oy + oh >= y - tolerance,
+			Edge::Bottom => overlaps_horizontally && oy >= y + height - tolerance && oy <= y + height + tolerance,
+		}
+	})
+}
+
+// Koniec przeciągania w trybie krawędzi: wybiera najbliższą krawędź obszaru roboczego monitora pod środkiem okna
+// (pomijając te styczne z innym monitorem), zapisuje ją i wysuwa okno.
+fn dock_to_nearest_edge(app: &AppHandle, window: &WebviewWindow) {
+	let (Ok(position), Ok(size)) = (window.outer_position(), window.outer_size()) else {
+		return;
+	};
+	let center_x = position.x + size.width as i32 / 2;
+	let center_y = position.y + size.height as i32 / 2;
+	let monitor = window
+		.monitor_from_point(f64::from(center_x), f64::from(center_y))
+		.ok()
+		.flatten()
+		.or_else(|| window.current_monitor().ok().flatten());
+	let Some(monitor) = monitor else {
+		return;
+	};
+	let area = monitor.work_area();
+	let candidates = [
+		(Edge::Left, center_x - area.position.x),
+		(Edge::Right, area.position.x + area.size.width as i32 - center_x),
+		(Edge::Top, center_y - area.position.y),
+		(Edge::Bottom, area.position.y + area.size.height as i32 - center_y),
+	];
+	let free: Vec<_> = candidates.iter().filter(|(edge, _)| !edge_touches_monitor(window, &monitor, *edge)).collect();
+	// Gdyby każda krawędź sąsiadowała z innym monitorem, bierzemy wszystkie.
+	let pool = if free.is_empty() { candidates.iter().collect() } else { free };
+	let Some((edge, _)) = pool.into_iter().min_by_key(|(_, distance)| *distance) else {
+		return;
+	};
+	let offset = if matches!(edge, Edge::Left | Edge::Right) { position.y } else { position.x };
+	let dock = EdgeDock { edge: *edge, offset, monitor: (monitor.position().x, monitor.position().y) };
+	write_json(app, "edge-dock.json", &dock);
+	set_edge_expanded(app, window, true);
+}
+
+// Co 80 ms sprawdza, czy kursor jest nad oknem przy krawędzi: najechanie wysuwa, zjechanie na dłużej chowa.
+fn mouse_button_down() -> bool {
+	use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
+	// Najstarszy bit: przycisk jest teraz wciśnięty.
+	[VK_LBUTTON, VK_RBUTTON].iter().any(|key| unsafe { GetAsyncKeyState(i32::from(key.0)) } < 0)
+}
+
+fn edge_tick(app: &AppHandle) {
+	let st = state(app);
+	if !st.settings.lock().unwrap().edge_mode || *st.media_open.lock().unwrap() || st.drag_origin.lock().unwrap().is_some() {
+		return;
+	}
+	let Some(window) = main_window(app) else {
+		return;
+	};
+	if !window.is_visible().unwrap_or(false) {
+		return;
+	}
+	let (Ok(cursor), Ok(position), Ok(size)) = (window.cursor_position(), window.outer_position(), window.outer_size()) else {
+		return;
+	};
+	let (left, top) = (f64::from(position.x), f64::from(position.y));
+	let inside = cursor.x >= left && cursor.x < left + f64::from(size.width) && cursor.y >= top && cursor.y < top + f64::from(size.height);
+	let expanded = *st.edge_expanded.lock().unwrap();
+	if !expanded {
+		if inside {
+			set_edge_expanded(app, &window, true);
+		}
+		return;
+	}
+	// Wciśnięty przycisk myszy poza oknem to zwykle przeciąganie (plik z Eksploratora, tekst, zdjęcie):
+	// okno czeka wysunięte, żeby było gdzie to upuścić.
+	if inside || mouse_button_down() {
+		*st.edge_leave_at.lock().unwrap() = None;
+		return;
+	}
+	let left_at = *st.edge_leave_at.lock().unwrap().get_or_insert_with(Instant::now);
+	if left_at.elapsed() > EDGE_HIDE_DELAY && !*st.page_typing.lock().unwrap() {
+		set_edge_expanded(app, &window, false);
+	}
+}
+
+fn start_edge_hover(app: AppHandle) {
+	tauri::async_runtime::spawn(async move {
+		loop {
+			tokio::time::sleep(Duration::from_millis(80)).await;
+			edge_tick(&app);
+		}
+	});
 }
 
 // Przeciąganie panelu prawym przyciskiem (page/inject.js): „start”, potem „move” z przesunięciem kursora
@@ -234,6 +515,11 @@ fn drag_window(app: AppHandle, phase: String, dx: f64, dy: f64) {
 		}
 		_ => {
 			*state.drag_origin.lock().unwrap() = None;
+			// W trybie krawędzi puszczone okno przykleja się do najbliższej krawędzi i się wysuwa.
+			if state.settings.lock().unwrap().edge_mode {
+				dock_to_nearest_edge(&app, &window);
+				return;
+			}
 			// W trybie okna położenie zapisuje zdarzenie Moved, a przypinanie nie ma sensu.
 			if state.settings.lock().unwrap().window_mode {
 				return;
@@ -248,8 +534,16 @@ fn drag_window(app: AppHandle, phase: String, dx: f64, dy: f64) {
 	}
 }
 
+// Strona zgłasza, że pole tekstowe ma fokus (page/inject.js); wtedy okno przy krawędzi się nie chowa.
+#[tauri::command]
+fn set_typing(app: AppHandle, on: bool) {
+	*state(&app).page_typing.lock().unwrap() = on;
+}
+
 #[tauri::command]
 fn get_settings(app: AppHandle) -> Settings {
+	// Strona pyta o ustawienia po każdym załadowaniu; przy okazji dostaje stan paska krawędzi.
+	emit_edge_state(&app);
 	*state(&app).settings.lock().unwrap()
 }
 
@@ -303,6 +597,11 @@ fn set_fullscreen(app: AppHandle, on: bool) {
 #[tauri::command]
 fn hide_window(app: AppHandle) {
 	if let Some(window) = main_window(&app) {
+		// Przy krawędzi Esc zwija okno do zakładki; schowane całkiem zniknęłaby i zakładka.
+		if state(&app).settings.lock().unwrap().edge_mode {
+			set_edge_expanded(&app, &window, false);
+			return;
+		}
 		hide_main_window(&app, &window.as_ref().window());
 	}
 }
@@ -358,9 +657,10 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		Status::Idle => MenuItem::with_id(app, "check", strings.check_updates, packaged, None::<&str>)?,
 	};
 	// Podmenu „Okno”: sposób wyświetlania. Pinezka i przezroczystość nie działają w zwykłym oknie.
-	let panel = !settings.window_mode;
+	let panel = !settings.window_mode && !settings.edge_mode;
 	let window_menu = Submenu::with_items(app, strings.window_menu, true, &[
 		&CheckMenuItem::with_id(app, "window_mode", strings.window_mode, true, settings.window_mode, None::<&str>)?,
+		&CheckMenuItem::with_id(app, "edge_mode", strings.edge_mode, true, settings.edge_mode, None::<&str>)?,
 		&PredefinedMenuItem::separator(app)?,
 		&CheckMenuItem::with_id(app, "pinned", strings.pin, panel, settings.pinned, None::<&str>)?,
 		&CheckMenuItem::with_id(app, "translucent", strings.translucent, panel, settings.translucent, None::<&str>)?,
@@ -379,6 +679,7 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		Box::new(PredefinedMenuItem::separator(app)?),
 		Box::new(CheckMenuItem::with_id(app, "muted", strings.mute, true, settings.muted, None::<&str>)?),
 		Box::new(CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?),
+		Box::new(CheckMenuItem::with_id(app, "auto_upload", strings.auto_upload, true, settings.auto_upload, None::<&str>)?),
 		Box::new(window_menu),
 		Box::new(look_menu),
 		Box::new(PredefinedMenuItem::separator(app)?),
@@ -413,7 +714,12 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 			set_setting_value(app, "window_mode", !settings.window_mode);
 			show_window(app);
 		}
+		"edge_mode" => {
+			set_setting_value(app, "edge_mode", !settings.edge_mode);
+			show_window(app);
+		}
 		"hide_video_call" => set_setting_value(app, "hide_video_call", !settings.hide_video_call),
+		"auto_upload" => set_setting_value(app, "auto_upload", !settings.auto_upload),
 		"autostart" => {
 			let autolaunch = app.autolaunch();
 			let _ = if autolaunch.is_enabled().unwrap_or(false) { autolaunch.disable() } else { autolaunch.enable() };
@@ -506,6 +812,11 @@ fn show_window(app: &AppHandle) {
 	let Some(window) = main_window(app) else {
 		return;
 	};
+	// W trybie krawędzi wywołanie okna (ikona, menu) od razu je wysuwa.
+	if state(app).settings.lock().unwrap().edge_mode {
+		*state(app).edge_expanded.lock().unwrap() = true;
+		*state(app).edge_leave_at.lock().unwrap() = None;
+	}
 	restore_window(app, &window);
 	let long_hidden = state(app).hidden_at.lock().unwrap().take().is_some_and(|at| at.elapsed() >= BACK_TO_LIST_AFTER);
 	let in_conversation = window.url().is_ok_and(|url| url.path().contains("/t/"));
@@ -523,12 +834,41 @@ fn hide_main_window(app: &AppHandle, window: &Window) {
 	let _ = window.hide();
 }
 
+// Panel stracił fokus: chowa się po puszczeniu przycisku myszy, chyba że puszczono go nad panelem.
+// Tak plik czy zdjęcie przeciągnięte z innego okna można upuścić w rozmowie; zwykły klik obok chowa panel jak dotąd.
+fn hide_after_mouse_up(app: AppHandle) {
+	std::thread::spawn(move || {
+		let started = Instant::now();
+		while mouse_button_down() && started.elapsed() < Duration::from_secs(60) {
+			std::thread::sleep(Duration::from_millis(20));
+		}
+		let Some(window) = main_window(&app) else {
+			return;
+		};
+		if !window.is_visible().unwrap_or(false) || window.is_focused().unwrap_or(false) {
+			return;
+		}
+		let (Ok(cursor), Ok(position), Ok(size)) = (window.cursor_position(), window.outer_position(), window.outer_size()) else {
+			return;
+		};
+		let (left, top) = (f64::from(position.x), f64::from(position.y));
+		let over = cursor.x >= left && cursor.x < left + f64::from(size.width) && cursor.y >= top && cursor.y < top + f64::from(size.height);
+		if over {
+			let _ = window.set_focus();
+			return;
+		}
+		*state(&app).hidden_by_blur_at.lock().unwrap() = Some(Instant::now());
+		hide_main_window(&app, &window.as_ref().window());
+	});
+}
+
 fn toggle_window(app: &AppHandle) {
 	let Some(window) = main_window(app) else {
 		return;
 	};
 	// Zwykłe okno: klik w ikonę zawsze je wyciąga na wierzch (chowa się krzyżykiem albo minimalizacją).
-	if state(app).settings.lock().unwrap().window_mode {
+	let settings = *state(app).settings.lock().unwrap();
+	if settings.window_mode || settings.edge_mode {
 		show_window(app);
 		return;
 	}
@@ -588,7 +928,8 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
 		WindowEvent::Focused(false) => {
 			let devtools_open = main_window(app).is_some_and(|window| window.is_devtools_open());
 			let settings = *state(app).settings.lock().unwrap();
-			let pinned = settings.pinned || settings.window_mode;
+			// W trybie krawędzi okno chowa pętla najeżdżania, nie utrata fokusu.
+			let pinned = settings.pinned || settings.window_mode || settings.edge_mode;
 			// Okno nie ma ramki: chwycenie krawędzi do zmiany rozmiaru zabiera mu fokus. Wtedy nie chowamy,
 			// a po skończonym przeciąganiu oddajemy fokus, żeby klik obok znów chował panel.
 			if !devtools_open && !pinned && cursor_at_edge(window) {
@@ -596,8 +937,7 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
 				return;
 			}
 			if !devtools_open && !pinned && window.is_visible().unwrap_or(false) {
-				*state(app).hidden_by_blur_at.lock().unwrap() = Some(Instant::now());
-				hide_main_window(app, window);
+				hide_after_mouse_up(app.clone());
 			}
 		}
 		// Podgląd zdjęcia zajmuje cały obszar roboczy; tego położenia i rozmiaru nie zapamiętujemy.
@@ -637,6 +977,8 @@ fn create_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
 		.always_on_top(true)
 		// Przezroczyste okno: tło przypiętego, nieużywanego panelu prześwituje (page/style.css, messy-dim).
 		.transparent(true)
+		// Upuszczone pliki (np. zdjęcie z Eksploratora) dostaje strona, nie Tauri; inaczej nie trafiają do wiadomości.
+		.disable_drag_drop_handler()
 		.initialization_script(page_script())
 		.on_new_window(move |url, features| {
 			if is_call_window(&url) {
@@ -744,7 +1086,7 @@ fn main() {
 		.plugin(tauri_plugin_notification::init())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_updater::Builder::new().build())
-		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window])
+		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window, set_typing, upload::upload_chunk, upload::upload_file])
 		.on_window_event(on_window_event)
 		.setup(|app| {
 			let handle = app.handle();
@@ -758,7 +1100,12 @@ fn main() {
 				media_open: Mutex::new(false),
 				resized_at: Mutex::new(None),
 				drag_origin: Mutex::new(None),
+				edge_expanded: Mutex::new(false),
+				edge_leave_at: Mutex::new(None),
+				page_typing: Mutex::new(false),
+				slide_generation: AtomicU64::new(0),
 			});
+			start_edge_hover(handle.clone());
 
 			// Uruchamianie z Windowsem włączamy przy pierwszym starcie zainstalowanej aplikacji,
 			// bo Messy żyje w zasobniku i bez tego po restarcie komputera po prostu go nie ma.
@@ -767,7 +1114,12 @@ fn main() {
 				write_json(handle, "settings.json", &Settings::default());
 			}
 
-			create_window(handle)?;
+			let window = create_window(handle)?;
+			// Tryb krawędzi: od startu (też z Windowsem) zakładka czeka przy krawędzi, schowana i bez fokusu.
+			if state(handle).settings.lock().unwrap().edge_mode {
+				restore_window(handle, &window);
+				let _ = window.show();
+			}
 			create_tray(handle)?;
 			updater::setup(handle);
 			build_tray_menu(handle);

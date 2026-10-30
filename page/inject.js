@@ -127,7 +127,7 @@
 			settings = value;
 			document.documentElement.classList.toggle('messy-oled', settings.oled);
 			document.documentElement.classList.toggle('messy-no-video', settings.hide_video_call);
-			document.documentElement.classList.toggle('messy-window-mode', settings.window_mode);
+			document.documentElement.classList.toggle('messy-window-mode', settings.window_mode || settings.edge_mode);
 			applyTheme();
 			updateDim();
 			ensureThreadPin();
@@ -212,7 +212,7 @@
 		// wyciszenie i tryb tylko wtedy, gdy nagłówka „Czaty” nie widać (wąskie okno) i zmieszczą się obok tytułu.
 		const THREAD_EXTRA = ['light', 'muted', 'window_mode'];
 		function threadKeys(info) {
-			const keys = settings.window_mode ? [] : ['pinned'];
+			const keys = settings.window_mode || settings.edge_mode ? [] : ['pinned'];
 			const listHeader = document.getElementById('messy-mode-button');
 			if (listHeader?.checkVisibility({visibilityProperty: true})) {
 				return keys;
@@ -289,6 +289,258 @@
 
 		setInterval(reportUnread, 2000);
 		reportUnread();
+
+		// Tryb krawędzi: wąski pasek po stronie zwróconej do środka ekranu, widoczny gdy okno jest schowane.
+		// Pokazuje liczbę nieprzeczytanych i miga, gdy przybywa nowych.
+		const STRIP_ID = 'messy-edge-strip';
+		let edgeState = {edge: null, expanded: true};
+		function renderStrip() {
+			let strip = document.getElementById(STRIP_ID);
+			// Schowane okno: strona znika (okno jest przezroczyste), zostaje sama zakładka.
+			document.documentElement.classList.toggle('messy-edge-collapsed', Boolean(edgeState.edge && !edgeState.expanded));
+			if (!edgeState.edge) {
+				strip?.remove();
+				return;
+			}
+			if (!strip) {
+				strip = document.createElement('div');
+				strip.id = STRIP_ID;
+				strip.innerHTML = '<div class="messy-edge-grip"></div><div class="messy-edge-badge"></div>';
+				strip.addEventListener('animationend', () => strip.classList.remove('blink'));
+				document.body.append(strip);
+			}
+			strip.dataset.edge = edgeState.edge;
+			strip.classList.toggle('messy-edge-shown', !edgeState.expanded);
+			const badge = strip.querySelector('.messy-edge-badge');
+			badge.textContent = lastUnread > 99 ? '99+' : String(lastUnread);
+			badge.hidden = lastUnread === 0;
+		}
+		window.messy.onEdgeState(value => {
+			edgeState = value;
+			renderStrip();
+		});
+		let stripUnread = 0;
+		setInterval(() => {
+			if (lastUnread > stripUnread && edgeState.edge && !edgeState.expanded) {
+				const strip = document.getElementById(STRIP_ID);
+				if (strip) {
+					strip.classList.remove('blink');
+					void strip.offsetWidth;
+					strip.classList.add('blink');
+				}
+			}
+			if (lastUnread !== stripUnread) {
+				stripUnread = lastUnread;
+				renderStrip();
+			}
+		}, 500);
+
+		// Facebook odrzuca programy, skrypty i inne nietypowe pliki. Wszystkiemu spoza listy zwykłych typów (zdjęcia,
+		// filmy, muzyka, dokumenty; archiwa Facebook też odrzuca) dopisujemy „.txt” (setup.exe → setup.exe.txt), jak robi się to ręcznie:
+		// odbiorca widzi pełną nazwę i sam zmienia ją z powrotem.
+		const REGULAR_FILE = /\.(jpe?g|png|gif|webp|heic|heif|bmp|tiff?|svg|mp4|mov|m4v|webm|avi|mkv|3gp|mp3|m4a|aac|wav|ogg|opus|flac|pdf|txt|md|csv|json|xml|log|docx?|xlsx?|pptx?|odt|ods|odp|rtf)$/i;
+		const blocked = file => !REGULAR_FILE.test(file.name);
+		// Pliki ponad limit Messengera nie trafiają do Facebooka: okienko pyta, czy wysłać je przez Gofile
+		// (src-tauri/src/upload.rs) i wkleić link do pola wiadomości.
+		const SIZE_LIMIT = 100 * 1024 * 1024;
+		// Dzieli pliki: te do Facebooka (z „.txt” tam, gdzie trzeba) i za duże. changed: trzeba podmienić listę.
+		const sortFiles = files => {
+			const transfer = new DataTransfer();
+			const big = [];
+			let changed = false;
+			for (const file of files) {
+				if (file.size > SIZE_LIMIT) {
+					big.push(file);
+					changed = true;
+				} else if (blocked(file)) {
+					transfer.items.add(new File([file], `${file.name}.txt`, {type: 'text/plain', lastModified: file.lastModified}));
+					changed = true;
+				} else {
+					transfer.items.add(file);
+				}
+			}
+			return {transfer, big, changed};
+		};
+		// Upuszczony plik: zatrzymujemy oryginalne zdarzenie i puszczamy to samo z przemianowanymi plikami.
+		window.addEventListener('drop', event => {
+			if (!event.isTrusted || !event.dataTransfer?.files.length) {
+				return;
+			}
+			const {transfer, big, changed} = sortFiles(event.dataTransfer.files);
+			if (!changed) {
+				return;
+			}
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			// Bez plików do Facebooka też puszczamy (puste) upuszczenie, bo inaczej jego nakładka „Upuść pliki tutaj” zostaje na ekranie.
+			event.target.dispatchEvent(new DragEvent('drop', {dataTransfer: transfer, bubbles: true, cancelable: true, composed: true, clientX: event.clientX, clientY: event.clientY}));
+			offerUpload(big);
+		}, true);
+		// Plik wybrany przyciskiem „Dołącz”: podmieniamy listę, zanim zobaczy ją Facebook.
+		window.addEventListener('change', event => {
+			const input = event.target;
+			if (!(input instanceof HTMLInputElement) || input.type !== 'file' || !input.files?.length) {
+				return;
+			}
+			const {transfer, big, changed} = sortFiles(input.files);
+			if (!changed) {
+				return;
+			}
+			if (transfer.files.length) {
+				input.files = transfer.files;
+			} else {
+				event.stopImmediatePropagation();
+				input.value = '';
+			}
+			offerUpload(big);
+		}, true);
+
+		const formatSize = bytes => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.round(bytes / 1024 ** 2)} MB`;
+		const fillText = (text, values) => text.replace(/\{(\w+)\}/g, (match, key) => values[key] ?? match);
+		const uploadQueue = [];
+		let uploadDialog = null;
+		const offerUpload = files => {
+			uploadQueue.push(...files);
+			if (uploadDialog) {
+				showQueue();
+			} else {
+				showNextUpload();
+			}
+		};
+		// Kilka dużych plików idzie po kolei (Messy trzyma jeden naraz); karta pokazuje, ile czeka.
+		const showQueue = () => {
+			const queue = uploadDialog?.querySelector('.messy-upload-queue');
+			if (queue) {
+				queue.textContent = uploadQueue.length ? fillText(strings.uploadQueue, {count: uploadQueue.length}) : '';
+			}
+			uploadDialog?.querySelector('.messy-upload-waiting')?.toggleAttribute('hidden', !sendWhenDone);
+		};
+
+		// Wysłanie wiadomości (Enter albo przycisk) w trakcie wysyłania plików czeka, aż wszystkie linki trafią
+		// do pola; wtedy Messy sam klika „wyślij” i tekst idzie razem z linkami.
+		let uploading = false;
+		let sendWhenDone = false;
+		// Przycisk wysyłania Messengera ma w opisie „Enter” („Naciśnij Enter, aby wysłać” / „Press enter to send”).
+		const findSendButton = () => [...document.querySelectorAll('[role="button"][aria-label]')].find(button => /enter/i.test(button.getAttribute('aria-label')));
+		const holdSend = event => {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			sendWhenDone = true;
+			showQueue();
+		};
+		document.addEventListener('keydown', event => {
+			if (uploading && event.key === 'Enter' && !event.shiftKey && event.target instanceof HTMLElement && event.target.closest('[role="textbox"][contenteditable="true"]')) {
+				holdSend(event);
+			}
+		}, true);
+		document.addEventListener('click', event => {
+			if (uploading && event.isTrusted && event.target instanceof Element && event.target.closest('[role="button"]') === findSendButton()) {
+				holdSend(event);
+			}
+		}, true);
+		const sendHeldMessage = () => {
+			if (!sendWhenDone) {
+				return;
+			}
+			sendWhenDone = false;
+			// Chwila, żeby Messenger zauważył wklejony tekst i pokazał przycisk wysyłania.
+			setTimeout(() => findSendButton()?.click(), 150);
+		};
+		window.messy.onUploadProgress(percent => {
+			const bar = uploadDialog?.querySelector('.messy-upload-bar > div');
+			if (bar) {
+				bar.style.width = `${percent}%`;
+				uploadDialog.querySelector('.messy-upload-text').textContent = fillText(strings.uploadProgress, {percent});
+			}
+		});
+		// Do pola wiadomości trafia nazwa, rozmiar i link; wysyłasz to sam (Enter), jak zwykłą wiadomość.
+		const pasteLink = (file, link) => {
+			const composer = document.querySelector('[role="textbox"][contenteditable="true"]');
+			if (composer) {
+				composer.focus();
+				document.execCommand('insertText', false, `${file.name} (${formatSize(file.size)}): ${link} `);
+			}
+		};
+		// Karta nad polem wiadomości, bez zasłaniania rozmowy: można dalej pisać i przewijać, także w trakcie wysyłania.
+		const FILE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M6 2h8l6 6v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm7 1.5V9h5.5L13 3.5Z"/></svg>';
+		function showNextUpload() {
+			uploadDialog?.remove();
+			uploadDialog = null;
+			const file = uploadQueue.shift();
+			if (!file || !strings) {
+				uploading = false;
+				sendHeldMessage();
+				return;
+			}
+			const card = document.createElement('div');
+			card.id = 'messy-upload';
+			card.setAttribute('role', 'status');
+			card.innerHTML = `<div class="messy-upload-icon">${FILE_ICON}</div>`
+				+ '<div class="messy-upload-body"><div class="messy-upload-name"><span></span><small></small><em class="messy-upload-queue"></em></div>'
+				+ '<div class="messy-upload-waiting" hidden></div>'
+				+ '<div class="messy-upload-text"></div><div class="messy-upload-bar" hidden><div></div></div>'
+				+ '<label class="messy-upload-dont-ask"><input type="checkbox" id="messy-upload-dont-ask"> <span></span></label></div>'
+				+ '<div class="messy-upload-buttons"><button type="button" class="messy-upload-cancel"></button>'
+				+ '<button type="button" class="messy-upload-send"></button></div>';
+			const text = card.querySelector('.messy-upload-text');
+			const bar = card.querySelector('.messy-upload-bar');
+			const cancel = card.querySelector('.messy-upload-cancel');
+			const send = card.querySelector('.messy-upload-send');
+			const dontAsk = card.querySelector('.messy-upload-dont-ask');
+			card.querySelector('.messy-upload-name span').textContent = file.name;
+			card.querySelector('.messy-upload-name span').title = file.name;
+			card.querySelector('.messy-upload-name small').textContent = formatSize(file.size);
+			dontAsk.querySelector('span').textContent = strings.uploadDontAsk;
+			card.querySelector('.messy-upload-waiting').textContent = strings.uploadWaiting;
+			text.textContent = strings.uploadTooBig;
+			cancel.textContent = strings.uploadCancel;
+			send.textContent = strings.uploadSend;
+			cancel.addEventListener('click', showNextUpload);
+			const start = async () => {
+				// „Nie pytaj więcej” zapisuje ustawienie; wyłącza się je w menu ikony.
+				if (dontAsk.querySelector('input').checked) {
+					window.messy.setSetting('auto_upload', true);
+				}
+				uploading = true;
+				dontAsk.hidden = true;
+				send.hidden = true;
+				cancel.hidden = true;
+				bar.hidden = false;
+				text.textContent = fillText(strings.uploadProgress, {percent: 0});
+				try {
+					pasteLink(file, await window.messy.uploadFile(file));
+					showNextUpload();
+				} catch (error) {
+					// Wstrzymana wiadomość wyjdzie po zamknięciu karty z błędem (bez tego linku).
+					uploading = false;
+					bar.hidden = true;
+					card.classList.add('messy-upload-failed');
+					text.textContent = fillText(strings.uploadError, {error: String(error)});
+					cancel.textContent = strings.uploadClose;
+					cancel.hidden = false;
+				}
+			};
+			send.addEventListener('click', start);
+			document.body.append(card);
+			uploadDialog = card;
+			showQueue();
+			if (settings.auto_upload) {
+				start();
+			}
+		}
+
+		// Piszesz w polu tekstowym: okno przy krawędzi nie chowa się po zjechaniu kursorem.
+		const isEditable = element => element instanceof HTMLElement && (element.isContentEditable || /^(INPUT|TEXTAREA)$/.test(element.tagName));
+		document.addEventListener('focusin', event => {
+			if (isEditable(event.target)) {
+				window.messy.setTyping(true);
+			}
+		});
+		document.addEventListener('focusout', event => {
+			if (isEditable(event.target)) {
+				window.messy.setTyping(false);
+			}
+		});
 
 		// Zielony przycisk „Zaktualizuj” przed pozostałymi, widoczny tylko gdy aktualizacja jest pobrana.
 		const UPDATE_ID = 'messy-update-button';
