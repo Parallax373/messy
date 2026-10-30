@@ -273,7 +273,6 @@
 				infoCell.before(clone);
 			}
 		}
-		new MutationObserver(ensureThreadPin).observe(document.body, {childList: true, subtree: true});
 
 		// Liczymy nieprzeczytane rozmowy na liście czatów: Facebook pogrubia ich nazwę i podgląd (600+,
 		// przeczytane mają 500/400). Liczba w tytule strony się nie nadaje, bo obejmuje powiadomienia
@@ -336,7 +335,6 @@
 			ensureUpdateButton();
 		});
 
-		new MutationObserver(ensureUpdateButton).observe(document.body, {childList: true, subtree: true});
 
 		window.messy.onSettingsChange(apply);
 
@@ -347,8 +345,6 @@
 			ensureUpdateButton();
 		});
 
-		// Facebook przebudowuje nagłówek przy nawigacji, więc przyciski dokładamy ponownie, gdy znikną.
-		new MutationObserver(ensureButtons).observe(document.body, {childList: true, subtree: true});
 
 		// Przytrzymany prawy przycisk przesuwa panel (od 6 px ruchu); krótki klik dalej otwiera zwykłe menu.
 		const dpr = () => window.devicePixelRatio || 1;
@@ -479,7 +475,6 @@
 				swapClasses(swapped);
 			}
 		}
-		new MutationObserver(fixEmptyList).observe(document.body, {childList: true, subtree: true});
 		// Po zmianie szerokości układ Facebooka może być inny, więc zaczynamy od jego własnych klas.
 		window.addEventListener('resize', () => {
 			if (swapped?.every(element => element.isConnected)) {
@@ -511,12 +506,27 @@
 			return false;
 		});
 		let mediaOpen = false;
-		new MutationObserver(() => {
+		function checkMediaViewer() {
 			const open = location.pathname.startsWith('/messenger_media') || isMediaViewer();
 			if (open !== mediaOpen) {
 				mediaOpen = open;
 				window.messy.setFullscreen(open);
 			}
+		}
+
+		// Facebook zmienia DOM bez przerwy (nowe wiadomości, „pisze…”, animacje) i przebudowuje nagłówek przy
+		// nawigacji. Poprawki mierzą układ strony, więc zamiast przy każdej zmianie odpalamy je razem, raz na klatkę
+		// (przed jej narysowaniem, więc nic nie mignie).
+		let fixFrame = 0;
+		new MutationObserver(() => {
+			fixFrame ||= requestAnimationFrame(() => {
+				fixFrame = 0;
+				ensureButtons();
+				ensureUpdateButton();
+				ensureThreadPin();
+				fixEmptyList();
+				checkMediaViewer();
+			});
 		}).observe(document.body, {childList: true, subtree: true});
 	}
 

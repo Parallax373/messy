@@ -23,6 +23,18 @@ html:root { overflow: hidden !important; }
 html:not(.__fb-dark-mode) ::-webkit-scrollbar-thumb { background-color: rgba(0, 0, 0, 0.2); }
 html:not(.__fb-dark-mode) ::-webkit-scrollbar-thumb:hover { background-color: rgba(0, 0, 0, 0.4); }
 
+/* Okno nie ma ramki, a na czarnym tle nie widać, gdzie kończy się okno i gdzie łapać je do zmiany rozmiaru.
+   Cienka obwódka nad całą stroną, przepuszcza kliknięcia. */
+html::after {
+	content: '';
+	position: fixed;
+	inset: 0;
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	pointer-events: none;
+	z-index: 2147483647;
+}
+html:not(.__fb-dark-mode)::after { border-color: rgba(0, 0, 0, 0.18); }
+
 /* Tryb OLED: czysta czerń zamiast szarości ciemnego motywu Facebooka. Elementy wyniesione
    (okienka, pola tekstowe, cudze dymki) dostają bardzo ciemną szarość, żeby nie zlewały się z tłem. */
 html.messy-oled.__fb-dark-mode, html.messy-oled.__fb-dark-mode * {
