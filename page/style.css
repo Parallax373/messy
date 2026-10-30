@@ -34,6 +34,45 @@ html::after {
 	z-index: 2147483647;
 }
 html:not(.__fb-dark-mode)::after { border-color: rgba(0, 0, 0, 0.18); }
+/* Karta „plik za duży, wysłać przez Gofile?” (page/inject.js, showNextUpload): nad polem wiadomości, jak załącznik,
+   bez zaciemniania; rozmowa pod spodem dalej działa. Kolory ze zmiennych Messengera, więc pasuje do motywu. */
+#messy-upload { position: fixed; left: 12px; right: 12px; bottom: 68px; z-index: 2147483646; max-width: 460px; margin: 0 auto;
+	display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 10px 10px 10px 12px;
+	border-radius: 14px; background: var(--card-background, #242526); color: var(--primary-text, #e4e6eb);
+	border: 1px solid var(--media-inner-border, rgba(128, 128, 128, .25)); box-shadow: 0 6px 20px rgba(0, 0, 0, .3);
+	font: 13px/1.35 system-ui, sans-serif; animation: messy-upload-in .18s ease-out; }
+@keyframes messy-upload-in { from { opacity: 0; transform: translateY(8px); } }
+.messy-upload-icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+	background: var(--comment-background, rgba(128, 128, 128, .2)); color: var(--primary-button-background, #0866ff); }
+.messy-upload-failed .messy-upload-icon { color: #e0102f; }
+.messy-upload-body { min-width: 0; display: grid; gap: 3px; }
+.messy-upload-name { display: flex; gap: 6px; align-items: baseline; min-width: 0; font-weight: 600; }
+.messy-upload-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.messy-upload-name small { flex: none; font-weight: 400; color: var(--secondary-text, #b0b3b8); font-variant-numeric: tabular-nums; }
+.messy-upload-text { color: var(--secondary-text, #b0b3b8); font-variant-numeric: tabular-nums; }
+.messy-upload-queue { flex: none; margin-left: auto; font-style: normal; font-weight: 400; color: var(--secondary-text, #b0b3b8); }
+.messy-upload-dont-ask { display: flex; align-items: center; gap: 6px; width: fit-content; color: var(--secondary-text, #b0b3b8); cursor: pointer; }
+.messy-upload-dont-ask[hidden], .messy-upload-waiting[hidden] { display: none; }
+.messy-upload-waiting { color: var(--primary-button-background, #0866ff); font-weight: 600; }
+.messy-upload-dont-ask input { margin: 0; accent-color: var(--primary-button-background, #0866ff); }
+.messy-upload-failed .messy-upload-text { color: #f02849; }
+.messy-upload-bar { height: 4px; border-radius: 2px; background: var(--comment-background, rgba(128, 128, 128, .3)); overflow: hidden; }
+.messy-upload-bar > div { width: 0; height: 100%; background: var(--primary-button-background, #0866ff); transition: width .2s; }
+.messy-upload-bar[hidden], .messy-upload-buttons button[hidden] { display: none; }
+.messy-upload-buttons { display: flex; gap: 6px; }
+.messy-upload-buttons button { padding: 7px 12px; border: 0; border-radius: 8px; font: 600 13px system-ui, sans-serif; cursor: pointer;
+	white-space: nowrap; background: var(--secondary-button-background, rgba(128, 128, 128, .25)); color: inherit; }
+.messy-upload-buttons .messy-upload-send { background: var(--primary-button-background, #0866ff); color: #fff; }
+.messy-upload-buttons button:hover { filter: brightness(1.12); }
+.messy-upload-buttons button:focus-visible { outline: 2px solid var(--primary-button-background, #0866ff); outline-offset: 2px; }
+/* Wąskie okno: przyciski pod tekstem. */
+@media (max-width: 420px) {
+	#messy-upload { grid-template-columns: auto 1fr; }
+	.messy-upload-buttons { grid-column: 1 / -1; justify-content: flex-end; }
+}
+@media (prefers-reduced-motion: reduce) { #messy-upload { animation: none; } }
+/* Okno zwinięte do zakładki (tryb krawędzi) jest przezroczyste, więc bez obwódki i znaczka DEV. */
+html.messy-edge-collapsed::after, html.messy-edge-collapsed::before { display: none; }
 
 /* Tryb OLED: czysta czerń zamiast szarości ciemnego motywu Facebooka. Elementy wyniesione
    (okienka, pola tekstowe, cudze dymki) dostają bardzo ciemną szarość, żeby nie zlewały się z tłem. */
@@ -88,11 +127,54 @@ html.messy-dim:not(.__fb-dark-mode) span { text-shadow: 0 0 2px #fff, 0 0 4px #f
 html.messy-dim [style*="--chat-composer-button-color"] { background-image: none !important; }
 /* Ustawienie „Ukryj przycisk rozmowy wideo”; komórkę oznacza page/inject.js (markVideoCall). */
 html.messy-no-video .messy-video-cell { display: none !important; }
-/* W trybie zwykłego okna pinezka nic nie robi; w nagłówku rozmowy page/inject.js w ogóle jej wtedy nie wstawia. */
-html.messy-window-mode .messy-cell:has(#messy-pin-button) { display: none !important; }
-/* Włączona pinezka (page/inject.js, klasa messy-on). */
-.messy-on { box-shadow: inset 0 0 0 2px #0866ff !important; border-radius: 50% !important; }
+/* Menu trybów pod przyciskiem trybu (page/inject.js, openModeMenu), wyglądem jak menu Messengera. */
+#messy-mode-menu { position: fixed; z-index: 2147483646; width: 300px; max-width: calc(100vw - 16px); padding: 6px;
+	display: grid; gap: 2px; border-radius: 10px; background: var(--card-background, #242526); color: var(--primary-text, #e4e6eb);
+	box-shadow: 0 12px 28px rgba(0, 0, 0, .25), 0 2px 4px rgba(0, 0, 0, .1); border: 1px solid var(--media-inner-border, rgba(128, 128, 128, .2));
+	font: 14px/1.3 system-ui, sans-serif; animation: messy-menu-in .12s ease-out; }
+@keyframes messy-menu-in { from { opacity: 0; transform: translateY(-4px); } }
+#messy-mode-menu button { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%;
+	padding: 8px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+#messy-mode-menu button:hover, #messy-mode-menu button:focus-visible { background: var(--hover-overlay, rgba(128, 128, 128, .15)); outline: none; }
+.messy-mode-icon { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+	background: var(--comment-background, rgba(128, 128, 128, .2)); }
+#messy-mode-menu [aria-checked="true"] .messy-mode-icon { background: var(--primary-button-background, #0866ff); color: #fff; }
+.messy-mode-text { display: grid; gap: 2px; min-width: 0; }
+.messy-mode-text b { font-weight: 600; }
+.messy-mode-text small { font-size: 12px; color: var(--secondary-text, #b0b3b8); }
+.messy-mode-check { width: 16px; color: var(--primary-button-background, #0866ff); }
+/* Przezroczystość (tylko w trybie swobodnym): pod trybami, oddzielona kreską. */
+#messy-mode-menu .messy-mode-option { grid-template-columns: 16px 1fr; margin-top: 4px; padding-top: 10px; border-radius: 0 0 6px 6px;
+	border-top: 1px solid var(--media-inner-border, rgba(128, 128, 128, .2)); }
+@media (prefers-reduced-motion: reduce) { #messy-mode-menu { animation: none; } }
 /* Okienko emoji przeniesione nad pole wiadomości (page/inject.js, fixOffscreenPopups): bez strzałki do przycisku,
    wszystkie rogi zaokrąglone, szerokość jak treść, prawą krawędzią przy przycisku. */
 .messy-popup-above [role="dialog"] > div { border-radius: 12px !important; width: fit-content !important; margin-left: auto !important; }
 .messy-popup-above [role="dialog"] > div > svg { display: none !important; }
+/* Tryb krawędzi: schowane okno (klasa messy-edge-collapsed z page/inject.js, renderStrip) jest przezroczyste,
+   strona niewidoczna, a na widocznym pasku (EDGE_STRIP w main.rs, 16 px) stoi ciemna zakładka z uchwytem
+   i czerwoną kropką nieprzeczytanych, w kolorze kropki na ikonie zasobnika. */
+/* Selektor mocniejszy od trybu OLED i ciemnego motywu, które dają czarne tło html i body. */
+html.messy-edge-collapsed.messy-edge-collapsed.messy-edge-collapsed,
+html.messy-edge-collapsed.messy-edge-collapsed.messy-edge-collapsed body { background: transparent !important; }
+/* Przenikanie w czasie zjeżdżania okna (slide_to w main.rs, 280 ms): strona gaśnie, zakładka pojawia się pod koniec. */
+html, body { transition: background-color .25s ease-out; }
+body > *:not(#messy-edge-strip) { transition: opacity .25s ease-out; }
+html.messy-edge-collapsed body > *:not(#messy-edge-strip) { opacity: 0 !important; pointer-events: none !important; }
+#messy-edge-strip { position: fixed; z-index: 2147483647; display: flex; flex-direction: column; align-items: center;
+	justify-content: center; gap: 8px; width: 16px; height: 150px; background: #1c1f26; pointer-events: none; }
+#messy-edge-strip { opacity: 0; transition: opacity .12s ease-in; }
+#messy-edge-strip.messy-edge-shown { opacity: 1; transition: opacity .2s ease-out .15s; }
+#messy-edge-strip[data-edge="right"] { left: 0; top: calc(50% - 75px); border-radius: 8px 0 0 8px; }
+#messy-edge-strip[data-edge="left"] { right: 0; top: calc(50% - 75px); border-radius: 0 8px 8px 0; }
+#messy-edge-strip[data-edge="top"], #messy-edge-strip[data-edge="bottom"] { flex-direction: row; width: 150px; height: 16px; left: calc(50% - 75px); }
+#messy-edge-strip[data-edge="bottom"] { top: 0; border-radius: 8px 8px 0 0; }
+#messy-edge-strip[data-edge="top"] { bottom: 0; border-radius: 0 0 8px 8px; }
+.messy-edge-grip { width: 3px; height: 26px; border-radius: 2px; background: #4a505c; }
+#messy-edge-strip[data-edge="top"] .messy-edge-grip, #messy-edge-strip[data-edge="bottom"] .messy-edge-grip { width: 26px; height: 3px; }
+.messy-edge-badge { min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: #E0102F; color: #fff;
+	font: 700 10px/14px system-ui, sans-serif; text-align: center; }
+.messy-edge-badge[hidden] { display: none; }
+#messy-edge-strip.blink .messy-edge-badge { animation: messy-edge-blink .6s ease-in-out 3; }
+@keyframes messy-edge-blink { 50% { transform: scale(1.35); box-shadow: 0 0 8px #E0102F; } }
+@media (prefers-reduced-motion: reduce) { #messy-edge-strip.blink .messy-edge-badge { animation: none; } }

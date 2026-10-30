@@ -21,6 +21,7 @@ the way Steam or Discord do. Click anywhere else and it hides.
 - **OLED mode:** true black instead of Facebook's grey dark theme
 - **Mute notifications** with one click, right in the Chats header
 - **Resizable panel** that remembers its size
+- **Four modes**, one click away in the header: panel above the tray, free (stays on top wherever you drag it), normal window, or docked to a screen edge as a thin tab with the unread count that slides out on hover
 - **Starts with Windows** (can be turned off in the tray menu)
 - **Updates itself** in the background
 - **Polish and English**, following your Windows language
@@ -45,6 +46,7 @@ czy Discordzie. Kliknięcie gdzie indziej go chowa.
 - **Tryb OLED:** czysta czerń zamiast szarego ciemnego motywu Facebooka
 - **Wyciszanie powiadomień** jednym kliknięciem, w nagłówku „Czaty”
 - **Zmiana rozmiaru panelu**, zapamiętywana
+- **Cztery tryby** do wyboru jednym kliknięciem w nagłówku: panel nad zasobnikiem, swobodny (zostaje na wierzchu tam, gdzie go przeciągniesz), zwykłe okno albo przy krawędzi ekranu jako wąska zakładka z licznikiem nieprzeczytanych, wysuwana po najechaniu
 - **Uruchamianie z Windowsem** (można wyłączyć w menu ikony)
 - **Sam się aktualizuje** w tle
 - **Polski i angielski**, zależnie od języka Windowsa

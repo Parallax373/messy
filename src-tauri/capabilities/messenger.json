@@ -13,6 +13,10 @@
 		"allow-set-unread",
 		"allow-set-fullscreen",
 		"allow-drag-window",
-		"allow-hide-window"
+		"allow-hide-window",
+		"allow-set-typing",
+		"allow-upload-chunk",
+		"allow-upload-file",
+		"allow-set-mode"
 	]
 }
