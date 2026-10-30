@@ -18,6 +18,8 @@
 	window.messy = {
 		getSettings: () => invoke('get_settings'),
 		setSetting: (key, value) => invoke('set_setting', {key, value}),
+		// mode: 'panel' | 'free' | 'window' | 'edge' (src-tauri/src/main.rs, set_mode).
+		setMode: mode => invoke('set_mode', {mode}),
 		// Teksty przycisków w języku Windowsa (src-tauri/src/i18n.rs).
 		getStrings: () => invoke('get_strings'),
 		// Wersja gotowej do instalacji aktualizacji albo null, gdy jej nie ma.

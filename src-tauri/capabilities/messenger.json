@@ -16,6 +16,7 @@
 		"allow-hide-window",
 		"allow-set-typing",
 		"allow-upload-chunk",
-		"allow-upload-file"
+		"allow-upload-file",
+		"allow-set-mode"
 	]
 }

@@ -127,10 +127,26 @@ html.messy-dim:not(.__fb-dark-mode) span { text-shadow: 0 0 2px #fff, 0 0 4px #f
 html.messy-dim [style*="--chat-composer-button-color"] { background-image: none !important; }
 /* Ustawienie „Ukryj przycisk rozmowy wideo”; komórkę oznacza page/inject.js (markVideoCall). */
 html.messy-no-video .messy-video-cell { display: none !important; }
-/* W trybie zwykłego okna pinezka nic nie robi; w nagłówku rozmowy page/inject.js w ogóle jej wtedy nie wstawia. */
-html.messy-window-mode .messy-cell:has(#messy-pin-button) { display: none !important; }
-/* Włączona pinezka (page/inject.js, klasa messy-on). */
-.messy-on { box-shadow: inset 0 0 0 2px #0866ff !important; border-radius: 50% !important; }
+/* Menu trybów pod przyciskiem trybu (page/inject.js, openModeMenu), wyglądem jak menu Messengera. */
+#messy-mode-menu { position: fixed; z-index: 2147483646; width: 300px; max-width: calc(100vw - 16px); padding: 6px;
+	display: grid; gap: 2px; border-radius: 10px; background: var(--card-background, #242526); color: var(--primary-text, #e4e6eb);
+	box-shadow: 0 12px 28px rgba(0, 0, 0, .25), 0 2px 4px rgba(0, 0, 0, .1); border: 1px solid var(--media-inner-border, rgba(128, 128, 128, .2));
+	font: 14px/1.3 system-ui, sans-serif; animation: messy-menu-in .12s ease-out; }
+@keyframes messy-menu-in { from { opacity: 0; transform: translateY(-4px); } }
+#messy-mode-menu button { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%;
+	padding: 8px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+#messy-mode-menu button:hover, #messy-mode-menu button:focus-visible { background: var(--hover-overlay, rgba(128, 128, 128, .15)); outline: none; }
+.messy-mode-icon { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+	background: var(--comment-background, rgba(128, 128, 128, .2)); }
+#messy-mode-menu [aria-checked="true"] .messy-mode-icon { background: var(--primary-button-background, #0866ff); color: #fff; }
+.messy-mode-text { display: grid; gap: 2px; min-width: 0; }
+.messy-mode-text b { font-weight: 600; }
+.messy-mode-text small { font-size: 12px; color: var(--secondary-text, #b0b3b8); }
+.messy-mode-check { width: 16px; color: var(--primary-button-background, #0866ff); }
+/* Przezroczystość (tylko w trybie swobodnym): pod trybami, oddzielona kreską. */
+#messy-mode-menu .messy-mode-option { grid-template-columns: 16px 1fr; margin-top: 4px; padding-top: 10px; border-radius: 0 0 6px 6px;
+	border-top: 1px solid var(--media-inner-border, rgba(128, 128, 128, .2)); }
+@media (prefers-reduced-motion: reduce) { #messy-mode-menu { animation: none; } }
 /* Okienko emoji przeniesione nad pole wiadomości (page/inject.js, fixOffscreenPopups): bez strzałki do przycisku,
    wszystkie rogi zaokrąglone, szerokość jak treść, prawą krawędzią przy przycisku. */
 .messy-popup-above [role="dialog"] > div { border-radius: 12px !important; width: fit-content !important; margin-left: auto !important; }

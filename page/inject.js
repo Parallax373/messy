@@ -1,5 +1,5 @@
 // Wstrzykiwane do strony facebook.com/messages: przyciski Messy obok „…” w nagłówku „Czaty” (motyw, wyciszenie,
-// tryb okna/panelu, pinezka), motyw jasny/ciemny i klasy ustawień na <html> (same kolory są w page/style.css).
+// menu trybów), motyw jasny/ciemny i klasy ustawień na <html> (same kolory są w page/style.css).
 // Messy wstrzykuje go przed skryptami Facebooka, więc atrapa Notification działa od początku,
 // a reszta czeka na DOM.
 (() => {
@@ -15,9 +15,22 @@
 	const SUN = 'M10 6a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM10 1.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 1.5zm0 14a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5a.75.75 0 0 1 .75-.75zM1.5 10a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 1.5 10zm14 0a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75z';
 	const WINDOW = 'M4.75 3A1.75 1.75 0 0 0 3 4.75v10.5c0 .97.78 1.75 1.75 1.75h10.5c.97 0 1.75-.78 1.75-1.75V4.75C17 3.78 16.22 3 15.25 3H4.75zM4.5 7.5h11v7.75a.25.25 0 0 1-.25.25H4.75a.25.25 0 0 1-.25-.25V7.5z';
 	const PANEL = 'M3 4.75A1.75 1.75 0 0 1 4.75 3h10.5A1.75 1.75 0 0 1 17 4.75v10.5A1.75 1.75 0 0 1 15.25 17H4.75A1.75 1.75 0 0 1 3 15.25V4.75zM4.5 12v3.25c0 .14.11.25.25.25h10.5a.25.25 0 0 0 .25-.25V12h-11z';
+	const EDGE = 'M4.75 3A1.75 1.75 0 0 0 3 4.75v10.5c0 .97.78 1.75 1.75 1.75h10.5c.97 0 1.75-.78 1.75-1.75V4.75C17 3.78 16.22 3 15.25 3H4.75zM4.5 4.75c0-.14.11-.25.25-.25H12v11H4.75a.25.25 0 0 1-.25-.25V4.75z';
+	const CHECK = 'M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.6l7.3-7.3a1 1 0 0 1 1.4 0z';
 	const PIN = 'M12.6 2.2a.75.75 0 0 1 1.06 0l4.14 4.14a.75.75 0 0 1 0 1.06l-1.5 1.5a.75.75 0 0 1-.8.17l-2.6 2.6.3 2.84a.75.75 0 0 1-.21.6l-1.2 1.2a.75.75 0 0 1-1.06 0L7.5 13.06l-4.22 4.22a.75.75 0 0 1-1.06-1.06L6.44 12 3.2 8.76a.75.75 0 0 1 0-1.06l1.2-1.2a.75.75 0 0 1 .6-.22l2.85.3 2.6-2.6a.75.75 0 0 1 .17-.8l1.98-1.98z';
 
-	// Przyciski w kolejności od lewej; każdy przełącza jedno ustawienie. Ikona pokazuje, co się stanie po kliknięciu.
+	// Tryby wyświetlania (src-tauri/src/main.rs, set_mode): ikona przycisku pokazuje bieżący.
+	const MODES = [
+		{mode: 'panel', icon: PANEL, name: () => strings.modePanel, hint: () => strings.modePanelHint},
+		{mode: 'free', icon: PIN, name: () => strings.modeFree, hint: () => strings.modeFreeHint},
+		{mode: 'window', icon: WINDOW, name: () => strings.modeWindow, hint: () => strings.modeWindowHint},
+		{mode: 'edge', icon: EDGE, name: () => strings.modeEdge, hint: () => strings.modeEdgeHint},
+	];
+	const currentMode = () => settings.edge_mode ? 'edge' : settings.window_mode ? 'window' : settings.pinned ? 'free' : 'panel';
+	const modeSpec = mode => MODES.find(spec => spec.mode === mode);
+
+	// Przyciski w kolejności od lewej. Zwykły przełącza jedno ustawienie (ikona pokazuje, co się stanie po kliknięciu);
+	// przycisk trybu otwiera menu trybów (openModeMenu).
 	const BUTTONS = [
 		{
 			id: 'messy-theme-button',
@@ -35,22 +48,16 @@
 		},
 		{
 			id: 'messy-mode-button',
-			key: 'window_mode',
-			label: on => on ? strings.backToPanel : strings.toWindow,
-			icon: on => on ? PANEL : WINDOW,
+			key: 'mode',
+			menu: true,
+			value: currentMode,
+			label: mode => strings.mode.replace('{mode}', modeSpec(mode).name()),
+			icon: mode => modeSpec(mode).icon,
 			dimmed: () => false,
-		},
-		{
-			// Tylko w trybie panelu (page/style.css ukrywa ją w trybie okna).
-			id: 'messy-pin-button',
-			key: 'pinned',
-			label: on => on ? strings.pinOn : strings.pinOff,
-			icon: () => PIN,
-			dimmed: on => !on,
 		},
 	];
 
-	let settings = {muted: false, light: false, oled: false, pinned: false, window_mode: false};
+	let settings = {muted: false, light: false, oled: false, pinned: false, translucent: true, window_mode: false, edge_mode: false};
 	// Teksty w języku Windowsa z src/i18n.ts; dopóki nie dotrą, przycisków nie wstawiamy.
 	let strings = null;
 
@@ -71,9 +78,60 @@
 
 	const style = document.createElement('style');
 	style.textContent = __MESSY_CSS__;
+	// Style od razu, gdy jest <html>: Facebook rysuje ekran ładowania (z własnym paskiem i suwakiem), zanim
+	// dokument się wczyta, a bez tego pierwszy start wyglądał jak zwykła strona facebook.com.
+	const addStyle = () => {
+		if (document.documentElement && !style.isConnected) {
+			document.documentElement.append(style);
+		}
+		return style.isConnected;
+	};
+	if (!addStyle()) {
+		const observer = new MutationObserver(() => addStyle() && observer.disconnect());
+		observer.observe(document, {childList: true});
+	}
+
+	// Facebook przechodzi między swoimi stronami bez przeładowania (np. klik w zdjęcie profilowe otwiera profil),
+	// więc Messy (on_navigation w main.rs) tego nie widzi, a w panelu nie da się takiej strony przewinąć ani z niej
+	// wyjść. Linki spoza Messengera otwieramy w przeglądarce (window.open idzie do on_new_window), a gdy strona
+	// mimo to się zmieni, otwieramy ją w przeglądarce i wracamy do czatu.
+	const IN_APP = /^\/(messages|login|checkpoint|two_step_verification|recover|auth_platform|privacy\/consent|messenger_media)(\/|$)|^\/$/;
+	const outsideMessenger = url => /(^|\.)facebook\.com$/.test(url.hostname) && !IN_APP.test(url.pathname);
+	document.addEventListener('click', event => {
+		const link = event.target instanceof Element && event.target.closest('a[href]');
+		if (!link || event.button !== 0) {
+			return;
+		}
+		const url = new URL(link.href, location.href);
+		if (outsideMessenger(url)) {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			window.open(url.href, '_blank');
+		}
+	}, true);
+	let lastInApp = location.href;
+	const checkLocation = () => {
+		// W trakcie logowania Facebook przekierowuje po swojemu; tym zajmuje się on_navigation w main.rs.
+		if (!outsideMessenger(location) || !new URL(lastInApp).pathname.startsWith('/messages')) {
+			lastInApp = location.href;
+			return;
+		}
+		window.open(location.href, '_blank');
+		history.replaceState(history.state, '', lastInApp);
+		location.replace(lastInApp);
+	};
+	for (const method of ['pushState', 'replaceState']) {
+		const original = history[method];
+		history[method] = function (...args) {
+			const result = original.apply(this, args);
+			checkLocation();
+			return result;
+		};
+	}
+	window.addEventListener('popstate', checkLocation);
 
 	function start() {
-		document.head.append(style);
+		addStyle();
 
 		// Przypięty panel bez kursora nad sobą ma prawie przezroczyste tło (page/style.css, messy-dim).
 		// Wyjątek: piszesz, czyli okno ma fokus, a kursor tekstowy stoi w polu wiadomości.
@@ -99,15 +157,116 @@
 		window.addEventListener('focus', updateDim);
 
 		function render(button, spec) {
-			const on = settings[spec.key];
+			const on = spec.value ? spec.value() : settings[spec.key];
 			button.setAttribute('aria-label', spec.label(on));
 			button.title = spec.label(on);
+			if (spec.menu) {
+				button.setAttribute('aria-haspopup', 'menu');
+			}
 			const path = button.querySelector('path');
 			path.setAttribute('d', spec.icon(on));
 			path.setAttribute('fill-rule', 'evenodd');
 			button.style.opacity = spec.dimmed(on) ? '0.55' : '';
-			// Przypięty panel: wyraźna obwódka, sama jaśniejsza ikona była prawie niewidoczna.
-			button.classList.toggle('messy-on', spec.key === 'pinned' && on);
+		}
+
+		// Klik w przycisk Messy: menu trybów albo przełączenie ustawienia.
+		function onButtonClick(button, spec) {
+			button.addEventListener('click', async event => {
+				event.preventDefault();
+				event.stopPropagation();
+				if (spec.menu) {
+					openModeMenu(button);
+				} else {
+					await window.messy.setSetting(spec.key, !settings[spec.key]);
+				}
+			});
+		}
+
+		// Menu trybów pod przyciskiem, w stylu menu Messengera. Wybór od razu przełącza tryb.
+		const MODE_MENU_ID = 'messy-mode-menu';
+		function closeModeMenu() {
+			document.getElementById(MODE_MENU_ID)?.remove();
+			document.removeEventListener('pointerdown', onPointerOutside, true);
+			document.removeEventListener('keydown', onMenuKey, true);
+			window.removeEventListener('blur', closeModeMenu);
+		}
+		function onPointerOutside(event) {
+			if (!event.target.closest?.(`#${MODE_MENU_ID}, [aria-haspopup="menu"]`)) {
+				closeModeMenu();
+			}
+		}
+		function onMenuKey(event) {
+			const items = [...document.querySelectorAll(`#${MODE_MENU_ID} [role^="menuitem"]`)];
+			const index = items.indexOf(document.activeElement);
+			if (event.key === 'Escape') {
+				// Esc zamyka samo menu, nie chowa okna.
+				closeModeMenu();
+			} else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+				items.at((index + (event.key === 'ArrowDown' ? 1 : -1)) % items.length)?.focus();
+			} else if (event.key === 'Tab') {
+				closeModeMenu();
+				return;
+			} else {
+				return;
+			}
+			event.preventDefault();
+			event.stopImmediatePropagation();
+		}
+		const svgIcon = (path, size) => `<svg viewBox="0 0 20 20" width="${size}" height="${size}" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="${path}"></path></svg>`;
+		function openModeMenu(anchor) {
+			if (document.getElementById(MODE_MENU_ID)) {
+				closeModeMenu();
+				return;
+			}
+			const mode = currentMode();
+			const menu = document.createElement('div');
+			menu.id = MODE_MENU_ID;
+			menu.setAttribute('role', 'menu');
+			for (const spec of MODES) {
+				const item = document.createElement('button');
+				item.type = 'button';
+				item.setAttribute('role', 'menuitemradio');
+				item.setAttribute('aria-checked', String(spec.mode === mode));
+				item.innerHTML = `<span class="messy-mode-icon">${svgIcon(spec.icon, 20)}</span><span class="messy-mode-text"><b></b><small></small></span>`
+					+ `<span class="messy-mode-check">${spec.mode === mode ? svgIcon(CHECK, 16) : ''}</span>`;
+				item.querySelector('b').textContent = spec.name();
+				item.querySelector('small').textContent = spec.hint();
+				item.addEventListener('click', () => {
+					closeModeMenu();
+					if (spec.mode !== mode) {
+						window.messy.setMode(spec.mode);
+					}
+				});
+				menu.append(item);
+			}
+			// Przezroczystość dotyczy tylko trybu swobodnego.
+			if (mode === 'free') {
+				const item = document.createElement('button');
+				item.type = 'button';
+				item.className = 'messy-mode-option';
+				item.setAttribute('role', 'menuitemcheckbox');
+				item.setAttribute('aria-checked', String(settings.translucent));
+				item.innerHTML = `<span class="messy-mode-check">${settings.translucent ? svgIcon(CHECK, 16) : ''}</span><span></span>`;
+				item.lastChild.textContent = strings.translucent;
+				item.addEventListener('click', () => {
+					closeModeMenu();
+					window.messy.setSetting('translucent', !settings.translucent);
+				});
+				menu.append(item);
+			}
+			document.body.append(menu);
+			// Pod przyciskiem, wyrównane do jego prawej krawędzi; bez miejsca pod spodem nad przyciskiem.
+			const rect = anchor.getBoundingClientRect();
+			const width = menu.offsetWidth;
+			const height = menu.offsetHeight;
+			const left = Math.min(Math.max(8, rect.right - width), innerWidth - width - 8);
+			const top = rect.bottom + 6 + height <= innerHeight - 8 ? rect.bottom + 6 : Math.max(8, rect.top - 6 - height);
+			menu.style.left = `${left}px`;
+			menu.style.top = `${top}px`;
+			document.addEventListener('pointerdown', onPointerOutside, true);
+			document.addEventListener('keydown', onMenuKey, true);
+			window.addEventListener('blur', closeModeMenu);
+			menu.querySelector('[aria-checked="true"]')?.focus();
 		}
 
 		// Motyw: Facebook oznacza ciemne i jasne fragmenty klasami __fb-dark-mode / __fb-light-mode (zmienne
@@ -127,7 +286,6 @@
 			settings = value;
 			document.documentElement.classList.toggle('messy-oled', settings.oled);
 			document.documentElement.classList.toggle('messy-no-video', settings.hide_video_call);
-			document.documentElement.classList.toggle('messy-window-mode', settings.window_mode || settings.edge_mode);
 			applyTheme();
 			updateDim();
 			ensureThreadPin();
@@ -169,20 +327,14 @@
 					button.removeAttribute(attribute);
 				}
 
-				button.addEventListener('click', async event => {
-					event.preventDefault();
-					event.stopPropagation();
-					await window.messy.setSetting(spec.key, !settings[spec.key]);
-				});
-
+				onButtonClick(button, spec);
 				render(button, spec);
 				cell.before(clone);
 			}
 		}
 
-		// Pinezka także w nagłówku otwartej rozmowy, przed przyciskiem informacji (ostatni po prawej
+		// Przycisk trybu także w nagłówku otwartej rozmowy, przed przyciskiem informacji (ostatni po prawej
 		// przycisk nagłówka z aria-expanded bez aria-controls; etykiety zależą od języka, więc ich nie czytamy).
-		const THREAD_PIN_ID = 'messy-thread-pin';
 
 		// Najwyższy przodek przycisku, który zawiera tylko jego, czyli komórka w rzędzie przycisków.
 		function cellOf(button) {
@@ -208,11 +360,11 @@
 				video.classList.add('messy-video-cell');
 			}
 		}
-		// Przyciski Messy w nagłówku rozmowy, przed przyciskiem informacji. Pinezka zawsze w trybie panelu; motyw,
-		// wyciszenie i tryb tylko wtedy, gdy nagłówka „Czaty” nie widać (wąskie okno) i zmieszczą się obok tytułu.
-		const THREAD_EXTRA = ['light', 'muted', 'window_mode'];
+		// Przyciski Messy w nagłówku rozmowy, przed przyciskiem informacji: tylko wtedy, gdy nagłówka „Czaty” nie widać
+		// (wąskie okno), i tyle, ile zmieści się obok tytułu. Tryb ma pierwszeństwo, potem wyciszenie i motyw.
+		const THREAD_EXTRA = ['light', 'muted', 'mode'];
 		function threadKeys(info) {
-			const keys = settings.window_mode || settings.edge_mode ? [] : ['pinned'];
+			const keys = [];
 			const listHeader = document.getElementById('messy-mode-button');
 			if (listHeader?.checkVisibility({visibilityProperty: true})) {
 				return keys;
@@ -256,7 +408,7 @@
 				const clone = infoCell.cloneNode(true);
 				clone.classList.add('messy-cell');
 				const button = clone.querySelector('[role="button"]') ?? clone;
-				button.id = key === 'pinned' ? THREAD_PIN_ID : 'messy-thread-' + key;
+				button.id = 'messy-thread-' + key;
 				button.dataset.messyKey = key;
 				button.removeAttribute('aria-expanded');
 				const svg = button.querySelector('svg');
@@ -264,11 +416,7 @@
 					svg.setAttribute('viewBox', '0 0 36 36');
 					svg.innerHTML = '<g transform="translate(18,18)scale(1.35)translate(-10,-10)"><path fill="var(--mwp-header-button-color)"></path></g>';
 				}
-				button.addEventListener('click', async event => {
-					event.preventDefault();
-					event.stopPropagation();
-					await window.messy.setSetting(key, !settings[key]);
-				});
+				onButtonClick(button, spec);
 				render(button, spec);
 				infoCell.before(clone);
 			}

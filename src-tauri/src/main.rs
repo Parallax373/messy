@@ -214,6 +214,47 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 	}
 }
 
+// Cztery tryby wyświetlania (menu trybów na stronie i w menu ikony). W ustawieniach to nadal trzy przełączniki:
+// swobodny = przypięty panel, okno = window_mode, krawędź = edge_mode, panel = żaden z nich.
+const MODES: [&str; 4] = ["panel", "free", "window", "edge"];
+
+fn current_mode(settings: &Settings) -> &'static str {
+	if settings.edge_mode {
+		"edge"
+	} else if settings.window_mode {
+		"window"
+	} else if settings.pinned {
+		"free"
+	} else {
+		"panel"
+	}
+}
+
+fn set_mode_value(app: &AppHandle, mode: &str) {
+	if !MODES.contains(&mode) {
+		return;
+	}
+	let state = state(app);
+	let settings = {
+		let mut settings = state.settings.lock().unwrap();
+		settings.pinned = mode == "free";
+		settings.window_mode = mode == "window";
+		settings.edge_mode = mode == "edge";
+		*settings
+	};
+	*state.edge_leave_at.lock().unwrap() = None;
+	write_json(app, "settings.json", &settings);
+	emit_to_page(app, "settings-changed", settings);
+	build_tray_menu(app);
+	// show_window ustawia okno według trybu i je pokazuje (przy krawędzi wysunięte).
+	show_window(app);
+}
+
+#[tauri::command]
+fn set_mode(app: AppHandle, mode: String) {
+	set_mode_value(&app, &mode);
+}
+
 // Położenie i rozmiar okna w trybie okna (piksele fizyczne), zapamiętane osobno od panelu.
 #[derive(Serialize, Deserialize, Clone, Copy)]
 struct Geometry {
@@ -656,14 +697,16 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		Status::Error(message) => MenuItem::with_id(app, "check", fill(strings.check_updates_error, message), packaged, None::<&str>)?,
 		Status::Idle => MenuItem::with_id(app, "check", strings.check_updates, packaged, None::<&str>)?,
 	};
-	// Podmenu „Okno”: sposób wyświetlania. Pinezka i przezroczystość nie działają w zwykłym oknie.
-	let panel = !settings.window_mode && !settings.edge_mode;
+	// Podmenu „Okno”: tryb wyświetlania (zaznaczony bieżący). Przezroczystość działa tylko w trybie swobodnym.
+	let mode = current_mode(&settings);
+	let page = &strings.page;
 	let window_menu = Submenu::with_items(app, strings.window_menu, true, &[
-		&CheckMenuItem::with_id(app, "window_mode", strings.window_mode, true, settings.window_mode, None::<&str>)?,
-		&CheckMenuItem::with_id(app, "edge_mode", strings.edge_mode, true, settings.edge_mode, None::<&str>)?,
+		&CheckMenuItem::with_id(app, "mode_panel", page.mode_panel, true, mode == "panel", None::<&str>)?,
+		&CheckMenuItem::with_id(app, "mode_free", page.mode_free, true, mode == "free", None::<&str>)?,
+		&CheckMenuItem::with_id(app, "mode_window", page.mode_window, true, mode == "window", None::<&str>)?,
+		&CheckMenuItem::with_id(app, "mode_edge", page.mode_edge, true, mode == "edge", None::<&str>)?,
 		&PredefinedMenuItem::separator(app)?,
-		&CheckMenuItem::with_id(app, "pinned", strings.pin, panel, settings.pinned, None::<&str>)?,
-		&CheckMenuItem::with_id(app, "translucent", strings.translucent, panel, settings.translucent, None::<&str>)?,
+		&CheckMenuItem::with_id(app, "translucent", strings.translucent, mode == "free", settings.translucent, None::<&str>)?,
 	])?;
 	// Podmenu „Wygląd”: kolory i przyciski na stronie.
 	let look_menu = Submenu::with_items(app, strings.look_menu, true, &[
@@ -703,21 +746,9 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 		"muted" => set_setting_value(app, "muted", !settings.muted),
 		"dark_theme" => set_setting_value(app, "light", !settings.light),
 		"oled" => set_setting_value(app, "oled", !settings.oled),
-		"pinned" => {
-			set_setting_value(app, "pinned", !settings.pinned);
-			if !settings.pinned {
-				show_window(app);
-			}
-		}
 		"translucent" => set_setting_value(app, "translucent", !settings.translucent),
-		"window_mode" => {
-			set_setting_value(app, "window_mode", !settings.window_mode);
-			show_window(app);
-		}
-		"edge_mode" => {
-			set_setting_value(app, "edge_mode", !settings.edge_mode);
-			show_window(app);
-		}
+		// Klik w zaznaczony tryb zostawia go zaznaczonym (menu odznacza pozycję samo, więc budujemy je od nowa).
+		id if id.starts_with("mode_") => set_mode_value(app, &id["mode_".len()..]),
 		"hide_video_call" => set_setting_value(app, "hide_video_call", !settings.hide_video_call),
 		"auto_upload" => set_setting_value(app, "auto_upload", !settings.auto_upload),
 		"autostart" => {
@@ -1086,7 +1117,7 @@ fn main() {
 		.plugin(tauri_plugin_notification::init())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_updater::Builder::new().build())
-		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window, set_typing, upload::upload_chunk, upload::upload_file])
+		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window, set_typing, upload::upload_chunk, upload::upload_file, set_mode])
 		.on_window_event(on_window_event)
 		.setup(|app| {
 			let handle = app.handle();
