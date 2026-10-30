@@ -520,7 +520,15 @@
 				layer.style.maxHeight = above - 8 + 'px';
 			}
 		}
-		new MutationObserver(fixOffscreenPopups).observe(document.body, {childList: true, subtree: true});
+
+		// Po długim schowaniu Messy otwiera się na liście czatów, ale nie wtedy, gdy w polu wiadomości jest
+		// niewysłany tekst (przeładowanie strony by go skasowało).
+		window.messy.onBackToList(() => {
+			const draft = [...document.querySelectorAll('[role="textbox"][contenteditable="true"]')].some(box => box.textContent.trim());
+			if (!draft) {
+				location.assign('/messages/');
+			}
+		});
 
 		// Esc chowa okno do zasobnika, chyba że zamyka coś na stronie (menu, okno dialogowe, podgląd zdjęć).
 		window.addEventListener('keydown', event => {
@@ -563,6 +571,7 @@
 				ensureUpdateButton();
 				ensureThreadPin();
 				fixEmptyList();
+				fixOffscreenPopups();
 				checkMediaViewer();
 			});
 		}).observe(document.body, {childList: true, subtree: true});

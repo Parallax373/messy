@@ -26,6 +26,8 @@ const MIN_WIDTH: f64 = 320.0;
 const MIN_HEIGHT: f64 = 400.0;
 const MARGIN: f64 = 8.0;
 const TRAY_ID: &str = "tray";
+// Po tylu minutach w ukryciu panel otwiera się na liście czatów, a nie w ostatniej rozmowie.
+const BACK_TO_LIST_AFTER: Duration = Duration::from_secs(10 * 60);
 
 // Przy nieprzeczytanych dymek w ikonie robi się czerwony (assets/icon-unread.svg).
 const ICON_NORMAL: &[u8] = include_bytes!("../../assets/IconTray@2x.png");
@@ -88,6 +90,8 @@ struct AppState {
 	// Okno chowa się po utracie fokusu; klik w ikonę zasobnika zabiera fokus,
 	// więc bez tego znacznika ten sam klik od razu otwierałby je ponownie.
 	hidden_by_blur_at: Mutex<Option<Instant>>,
+	// Kiedy okno zostało schowane (z dowolnego powodu); po długiej przerwie wracamy do listy czatów.
+	hidden_at: Mutex<Option<Instant>>,
 	// Ostatnie położenie ikony zasobnika, przy niej otwiera się panel.
 	tray_rect: Mutex<Option<Rect>>,
 	// Podgląd zdjęcia powiększył panel; tego rozmiaru nie zapisujemy jako rozmiaru panelu.
@@ -299,7 +303,7 @@ fn set_fullscreen(app: AppHandle, on: bool) {
 #[tauri::command]
 fn hide_window(app: AppHandle) {
 	if let Some(window) = main_window(&app) {
-		let _ = window.hide();
+		hide_main_window(&app, &window.as_ref().window());
 	}
 }
 
@@ -503,9 +507,20 @@ fn show_window(app: &AppHandle) {
 		return;
 	};
 	restore_window(app, &window);
+	let long_hidden = state(app).hidden_at.lock().unwrap().take().is_some_and(|at| at.elapsed() >= BACK_TO_LIST_AFTER);
+	let in_conversation = window.url().is_ok_and(|url| url.path().contains("/t/"));
+	// Stronę przełącza page/inject.js, bo tylko ona wie, czy w polu wiadomości nie ma niewysłanego tekstu.
+	if long_hidden && in_conversation {
+		emit_to_page(app, "back-to-list", ());
+	}
 	let _ = window.show();
 	let _ = window.unminimize();
 	let _ = window.set_focus();
+}
+
+fn hide_main_window(app: &AppHandle, window: &Window) {
+	*state(app).hidden_at.lock().unwrap() = Some(Instant::now());
+	let _ = window.hide();
 }
 
 fn toggle_window(app: &AppHandle) {
@@ -519,7 +534,7 @@ fn toggle_window(app: &AppHandle) {
 	}
 	let recently_hidden = state(app).hidden_by_blur_at.lock().unwrap().is_some_and(|at| at.elapsed() < Duration::from_millis(300));
 	if window.is_visible().unwrap_or(false) {
-		let _ = window.hide();
+		hide_main_window(app, &window.as_ref().window());
 	} else if !recently_hidden {
 		show_window(app);
 	}
@@ -582,7 +597,7 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
 			}
 			if !devtools_open && !pinned && window.is_visible().unwrap_or(false) {
 				*state(app).hidden_by_blur_at.lock().unwrap() = Some(Instant::now());
-				let _ = window.hide();
+				hide_main_window(app, window);
 			}
 		}
 		// Podgląd zdjęcia zajmuje cały obszar roboczy; tego położenia i rozmiaru nie zapamiętujemy.
@@ -599,7 +614,7 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
 		// Aplikacja żyje w zasobniku, więc zamknięcie okna (np. Alt+F4) tylko je chowa.
 		WindowEvent::CloseRequested { api, .. } => {
 			api.prevent_close();
-			let _ = window.hide();
+			hide_main_window(app, window);
 		}
 		_ => {}
 	}
@@ -738,6 +753,7 @@ fn main() {
 				settings: Mutex::new(read_json(handle, "settings.json").unwrap_or_default()),
 				unread: Mutex::new(0),
 				hidden_by_blur_at: Mutex::new(None),
+				hidden_at: Mutex::new(None),
 				tray_rect: Mutex::new(None),
 				media_open: Mutex::new(false),
 				resized_at: Mutex::new(None),

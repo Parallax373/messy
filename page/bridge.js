@@ -6,7 +6,7 @@
 	}
 
 	const invoke = (command, args) => window.__TAURI_INTERNALS__.invoke(command, args);
-	const listeners = {'settings-changed': [], 'update-ready': []};
+	const listeners = {'settings-changed': [], 'update-ready': [], 'back-to-list': []};
 
 	// Messy wywołuje to przez eval, gdy zmieni się ustawienie albo stan aktualizacji.
 	window.__messyEmit = (name, value) => {
@@ -30,5 +30,7 @@
 		dragWindow: (phase, dx = 0, dy = 0) => void invoke('drag_window', {phase, dx, dy}),
 		hideWindow: () => void invoke('hide_window'),
 		onSettingsChange: callback => listeners['settings-changed'].push(callback),
+		// Okno było długo schowane w rozmowie (src-tauri/src/main.rs, show_window).
+		onBackToList: callback => listeners['back-to-list'].push(callback),
 	};
 })();
