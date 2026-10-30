@@ -1,5 +1,5 @@
-// Wstrzykiwane do strony facebook.com/messages: przyciski trybu OLED i wyciszenia obok „…”
-// w nagłówku „Czaty” oraz klasa trybu OLED na <html> (same kolory są w page/style.css).
+// Wstrzykiwane do strony facebook.com/messages: przyciski Messy obok „…” w nagłówku „Czaty” (motyw, wyciszenie,
+// tryb okna/panelu, pinezka), motyw jasny/ciemny i klasy ustawień na <html> (same kolory są w page/style.css).
 // Messy wstrzykuje go przed skryptami Facebooka, więc atrapa Notification działa od początku,
 // a reszta czeka na DOM.
 (() => {
@@ -12,16 +12,19 @@
 	const BELL = 'M10 2a5.5 5.5 0 0 0-5.5 5.5v2.74l-1.4 2.8A1 1 0 0 0 4 14.5h12a1 1 0 0 0 .9-1.46l-1.4-2.8V7.5A5.5 5.5 0 0 0 10 2zm-2.45 13.75a2.5 2.5 0 0 0 4.9 0h-4.9z';
 	const BELL_OFF = 'M2.22 2.22a.75.75 0 0 1 1.06 0l14.5 14.5a.75.75 0 1 1-1.06 1.06l-2.22-2.22H4a1 1 0 0 1-.9-1.46l1.4-2.8V7.5c0-.86.2-1.68.55-2.4L2.22 3.28a.75.75 0 0 1 0-1.06zM10 2a5.5 5.5 0 0 1 5.5 5.5v2.74l1.03 2.06L7.2 2.97A5.48 5.48 0 0 1 10 2zm-2.45 13.75a2.5 2.5 0 0 0 4.9 0h-4.9z';
 	const MOON = 'M8.2 2.1a.75.75 0 0 1 .17.83A6.25 6.25 0 0 0 17.07 11.6a.75.75 0 0 1 1 .9A8 8 0 1 1 7.5 1.93a.75.75 0 0 1 .7.17z';
+	const SUN = 'M10 6a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM10 1.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 1.5zm0 14a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5a.75.75 0 0 1 .75-.75zM1.5 10a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 1.5 10zm14 0a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75z';
+	const WINDOW = 'M4.75 3A1.75 1.75 0 0 0 3 4.75v10.5c0 .97.78 1.75 1.75 1.75h10.5c.97 0 1.75-.78 1.75-1.75V4.75C17 3.78 16.22 3 15.25 3H4.75zM4.5 7.5h11v7.75a.25.25 0 0 1-.25.25H4.75a.25.25 0 0 1-.25-.25V7.5z';
+	const PANEL = 'M3 4.75A1.75 1.75 0 0 1 4.75 3h10.5A1.75 1.75 0 0 1 17 4.75v10.5A1.75 1.75 0 0 1 15.25 17H4.75A1.75 1.75 0 0 1 3 15.25V4.75zM4.5 12v3.25c0 .14.11.25.25.25h10.5a.25.25 0 0 0 .25-.25V12h-11z';
 	const PIN = 'M12.6 2.2a.75.75 0 0 1 1.06 0l4.14 4.14a.75.75 0 0 1 0 1.06l-1.5 1.5a.75.75 0 0 1-.8.17l-2.6 2.6.3 2.84a.75.75 0 0 1-.21.6l-1.2 1.2a.75.75 0 0 1-1.06 0L7.5 13.06l-4.22 4.22a.75.75 0 0 1-1.06-1.06L6.44 12 3.2 8.76a.75.75 0 0 1 0-1.06l1.2-1.2a.75.75 0 0 1 .6-.22l2.85.3 2.6-2.6a.75.75 0 0 1 .17-.8l1.98-1.98z';
 
-	// Przyciski w kolejności od lewej; każdy przełącza jedno ustawienie.
+	// Przyciski w kolejności od lewej; każdy przełącza jedno ustawienie. Ikona pokazuje, co się stanie po kliknięciu.
 	const BUTTONS = [
 		{
-			id: 'messy-oled-button',
-			key: 'oled',
-			label: on => on ? strings.oledOn : strings.oledOff,
-			icon: () => MOON,
-			dimmed: on => !on,
+			id: 'messy-theme-button',
+			key: 'light',
+			label: on => on ? strings.lightOn : strings.lightOff,
+			icon: on => on ? MOON : SUN,
+			dimmed: () => false,
 		},
 		{
 			id: 'messy-mute-button',
@@ -31,6 +34,14 @@
 			dimmed: on => on,
 		},
 		{
+			id: 'messy-mode-button',
+			key: 'window_mode',
+			label: on => on ? strings.backToPanel : strings.toWindow,
+			icon: on => on ? PANEL : WINDOW,
+			dimmed: () => false,
+		},
+		{
+			// Tylko w trybie panelu (page/style.css ukrywa ją w trybie okna).
 			id: 'messy-pin-button',
 			key: 'pinned',
 			label: on => on ? strings.pinOn : strings.pinOff,
@@ -39,7 +50,7 @@
 		},
 	];
 
-	let settings = {muted: false, oled: false, pinned: false};
+	let settings = {muted: false, light: false, oled: false, pinned: false, window_mode: false};
 	// Teksty w języku Windowsa z src/i18n.ts; dopóki nie dotrą, przycisków nie wstawiamy.
 	let strings = null;
 
@@ -91,25 +102,43 @@
 			const on = settings[spec.key];
 			button.setAttribute('aria-label', spec.label(on));
 			button.title = spec.label(on);
-			button.querySelector('path').setAttribute('d', spec.icon(on));
+			const path = button.querySelector('path');
+			path.setAttribute('d', spec.icon(on));
+			path.setAttribute('fill-rule', 'evenodd');
 			button.style.opacity = spec.dimmed(on) ? '0.55' : '';
+			// Przypięty panel: wyraźna obwódka, sama jaśniejsza ikona była prawie niewidoczna.
+			button.classList.toggle('messy-on', spec.key === 'pinned' && on);
 		}
+
+		// Motyw: Facebook oznacza ciemne i jasne fragmenty klasami __fb-dark-mode / __fb-light-mode (zmienne
+		// kolorów), więc wystarczy je zamienić, także w elementach dokładanych później.
+		function applyTheme() {
+			const [from, to] = settings.light ? ['__fb-dark-mode', '__fb-light-mode'] : ['__fb-light-mode', '__fb-dark-mode'];
+			for (const element of document.getElementsByClassName(from)) {
+				element.classList.add(to);
+			}
+			for (const element of [...document.getElementsByClassName(from)]) {
+				element.classList.remove(from);
+			}
+		}
+		new MutationObserver(applyTheme).observe(document.documentElement, {childList: true, subtree: true, attributes: true, attributeFilter: ['class']});
 
 		function apply(value) {
 			settings = value;
 			document.documentElement.classList.toggle('messy-oled', settings.oled);
 			document.documentElement.classList.toggle('messy-no-video', settings.hide_video_call);
 			document.documentElement.classList.toggle('messy-window-mode', settings.window_mode);
+			applyTheme();
 			updateDim();
+			ensureThreadPin();
 			for (const spec of BUTTONS) {
 				const button = document.getElementById(spec.id);
 				if (button) {
 					render(button, spec);
 				}
 			}
-			const threadPin = document.getElementById('messy-thread-pin');
-			if (threadPin) {
-				render(threadPin, BUTTONS.find(spec => spec.key === 'pinned'));
+			for (const button of document.querySelectorAll('[data-messy-key]')) {
+				render(button, BUTTONS.find(spec => spec.key === button.dataset.messyKey));
 			}
 		}
 
@@ -179,7 +208,24 @@
 				video.classList.add('messy-video-cell');
 			}
 		}
-		const PIN_SPEC = BUTTONS.find(spec => spec.key === 'pinned');
+		// Przyciski Messy w nagłówku rozmowy, przed przyciskiem informacji. Pinezka zawsze w trybie panelu; motyw,
+		// wyciszenie i tryb tylko wtedy, gdy nagłówka „Czaty” nie widać (wąskie okno) i zmieszczą się obok tytułu.
+		const THREAD_EXTRA = ['light', 'muted', 'window_mode'];
+		function threadKeys(info) {
+			const keys = settings.window_mode ? [] : ['pinned'];
+			const listHeader = document.getElementById('messy-mode-button');
+			if (listHeader?.checkVisibility({visibilityProperty: true})) {
+				return keys;
+			}
+			// Miejsce: od lewej krawędzi rozmowy do przycisku informacji, minus „Wstecz”, tytuł (min. 160 px)
+			// i przyciski Facebooka w tym samym rzędzie; każdy przycisk zajmuje ok. 44 px.
+			const main = document.querySelector('[role="main"]')?.getBoundingClientRect();
+			const row = cellOf(info).parentElement;
+			const facebookButtons = [...row.children].filter(cell => !cell.classList.contains('messy-cell') && cell.getBoundingClientRect().width > 0).length - 1;
+			const room = main ? info.getBoundingClientRect().left - main.left - 60 - 160 - facebookButtons * 44 - keys.length * 44 : 0;
+			const extra = THREAD_EXTRA.slice(Math.max(0, THREAD_EXTRA.length - Math.floor(room / 44)));
+			return [...extra, ...keys];
+		}
 		function ensureThreadPin() {
 			const info = [...document.querySelectorAll('[role="button"][aria-expanded]:not([aria-controls])')]
 				.filter(button => {
@@ -187,34 +233,45 @@
 					return rect.width >= 28 && rect.width <= 48 && rect.top >= 0 && rect.top < 80;
 				})
 				.sort((a, b) => b.getBoundingClientRect().left - a.getBoundingClientRect().left)[0];
-			if (info) {
-				markVideoCall(cellOf(info));
-			}
-			const existing = document.getElementById(THREAD_PIN_ID);
-			if (!strings || !info || (existing && existing.isConnected && existing.getBoundingClientRect().width > 0)) {
+			if (!info) {
 				return;
 			}
-			existing?.closest('.messy-cell')?.remove();
-
-			const cell = cellOf(info);
-			// Kopia przycisku informacji: ten sam wygląd i kolor motywu rozmowy, tylko ikona pinezki.
-			const clone = cell.cloneNode(true);
-			clone.classList.add('messy-cell');
-			const button = clone.querySelector('[role="button"]') ?? clone;
-			button.id = THREAD_PIN_ID;
-			button.removeAttribute('aria-expanded');
-			const svg = button.querySelector('svg');
-			if (svg) {
-				svg.setAttribute('viewBox', '0 0 36 36');
-				svg.innerHTML = '<g transform="translate(18,18)scale(1.35)translate(-10,-10)"><path fill="var(--mwp-header-button-color)"></path></g>';
+			const infoCell = cellOf(info);
+			markVideoCall(infoCell);
+			if (!strings) {
+				return;
 			}
-			button.addEventListener('click', async event => {
-				event.preventDefault();
-				event.stopPropagation();
-				await window.messy.setSetting('pinned', !settings.pinned);
-			});
-			render(button, PIN_SPEC);
-			cell.before(clone);
+			const current = [...document.querySelectorAll('[data-messy-key]')];
+			const keys = threadKeys(info);
+			const same = current.length === keys.length && current.every((button, i) => button.dataset.messyKey === keys[i] && button.isConnected && button.getBoundingClientRect().width > 0);
+			if (same) {
+				return;
+			}
+			for (const button of current) {
+				button.closest('.messy-cell')?.remove();
+			}
+			for (const key of keys) {
+				const spec = BUTTONS.find(spec => spec.key === key);
+				// Kopia przycisku informacji: ten sam wygląd i kolor motywu rozmowy, tylko inna ikona.
+				const clone = infoCell.cloneNode(true);
+				clone.classList.add('messy-cell');
+				const button = clone.querySelector('[role="button"]') ?? clone;
+				button.id = key === 'pinned' ? THREAD_PIN_ID : 'messy-thread-' + key;
+				button.dataset.messyKey = key;
+				button.removeAttribute('aria-expanded');
+				const svg = button.querySelector('svg');
+				if (svg) {
+					svg.setAttribute('viewBox', '0 0 36 36');
+					svg.innerHTML = '<g transform="translate(18,18)scale(1.35)translate(-10,-10)"><path fill="var(--mwp-header-button-color)"></path></g>';
+				}
+				button.addEventListener('click', async event => {
+					event.preventDefault();
+					event.stopPropagation();
+					await window.messy.setSetting(key, !settings[key]);
+				});
+				render(button, spec);
+				infoCell.before(clone);
+			}
 		}
 		new MutationObserver(ensureThreadPin).observe(document.body, {childList: true, subtree: true});
 
@@ -340,6 +397,105 @@
 				event.stopPropagation();
 			}
 		}, true);
+
+		// Boczne przyciski myszy: „wstecz” z otwartej rozmowy wraca do listy czatów (zamiast skakać po historii
+		// między rozmowami), „dalej” nic nie robi. Podglądu zdjęć nie ruszamy, tam „wstecz” go zamyka.
+		const isBack = event => event.button === 3;
+		const isSideButton = event => event.button === 3 || event.button === 4;
+		const inThread = () => /\/(messages|messages\/e2ee)\/t\//.test(location.pathname);
+		for (const name of ['pointerdown', 'mousedown', 'mouseup', 'auxclick']) {
+			document.addEventListener(name, event => {
+				if (isSideButton(event) && !mediaOpen) {
+					event.preventDefault();
+					event.stopPropagation();
+				}
+			}, true);
+		}
+		// Akcja na auxclick: po zablokowanym pointerdown przeglądarka nie wysyła mouseup ani pointerup.
+		document.addEventListener('auxclick', event => {
+			if (!isSideButton(event) || mediaOpen) {
+				return;
+			}
+			event.preventDefault();
+			event.stopPropagation();
+			if (isBack(event) && inThread()) {
+				// Wąskie okno: rozmowa zasłania listę, a w nagłówku jest przycisk „Wstecz” Facebooka (mały przycisk
+				// przy lewej krawędzi rozmowy; etykieta zależy od języka). Szerokie okno: lista obok, wystarczy zmienić adres.
+				const main = document.querySelector('[role="main"]')?.getBoundingClientRect();
+				const arrow = main && [...document.querySelectorAll('[role="main"] [role="button"]')].find(button => {
+					const rect = button.getBoundingClientRect();
+					return rect.width >= 28 && rect.width <= 48 && rect.top >= 0 && rect.top < 60 && rect.left - main.left < 40;
+				});
+				if (arrow) {
+					arrow.click();
+				} else {
+					// Router Facebooka czyta adres przy popstate, więc lista otwiera się bez przeładowania strony.
+					history.pushState(null, '', '/messages/');
+					window.dispatchEvent(new PopStateEvent('popstate', {state: null}));
+				}
+			}
+		}, true);
+
+		// Błąd Facebooka: w wąskim oknie bez otwartej rozmowy (/messages/) lista czatów jest ukryta, a całe okno
+		// zajmuje „Nie wybrano czatów”. W dobrym stanie (po „Wstecz” Facebooka) oba kontenery mają zamienione
+		// klasy, więc zamieniamy je sami. Po otwarciu rozmowy cofamy zamianę, bo React pamięta swoje klasy
+		// i sam by ich nie poprawił.
+		let swapped = null;
+		function swapClasses(pair) {
+			const [a, b] = pair;
+			const c = a.className;
+			a.className = b.className;
+			b.className = c;
+		}
+		function fixEmptyList() {
+			if (swapped && (inThread() || !swapped.every(element => element.isConnected))) {
+				if (swapped.every(element => element.isConnected)) {
+					swapClasses(swapped);
+				}
+				swapped = null;
+			}
+			if (swapped || inThread()) {
+				return;
+			}
+			const nav = document.querySelector('[role="navigation"] [role="row"]')?.closest('[role="navigation"]');
+			const main = document.querySelector('[role="main"]');
+			if (!nav || !main) {
+				return;
+			}
+			let common = main;
+			while (common && !common.contains(nav)) {
+				common = common.parentElement;
+			}
+			const branch = element => {
+				while (element.parentElement !== common) {
+					element = element.parentElement;
+				}
+				return element;
+			};
+			const list = branch(nav);
+			const chat = branch(main);
+			if (getComputedStyle(list).visibility === 'hidden' && chat.getBoundingClientRect().width >= innerWidth - 1) {
+				swapped = [list, chat];
+				swapClasses(swapped);
+			}
+		}
+		new MutationObserver(fixEmptyList).observe(document.body, {childList: true, subtree: true});
+		// Po zmianie szerokości układ Facebooka może być inny, więc zaczynamy od jego własnych klas.
+		window.addEventListener('resize', () => {
+			if (swapped?.every(element => element.isConnected)) {
+				swapClasses(swapped);
+			}
+			swapped = null;
+			fixEmptyList();
+		});
+
+		// Esc chowa okno do zasobnika, chyba że zamyka coś na stronie (menu, okno dialogowe, podgląd zdjęć).
+		window.addEventListener('keydown', event => {
+			if (event.key !== 'Escape' || event.defaultPrevented || mediaOpen || [...document.querySelectorAll('[role="dialog"], [role="menu"], [role="listbox"]')].some(open => open.getBoundingClientRect().width > 0)) {
+				return;
+			}
+			window.messy.hideWindow();
+		});
 
 		// Podgląd zdjęć i filmów na pełnym ekranie, po zamknięciu z powrotem panel. Zwykłe czaty otwierają go
 		// pod /messenger_media, szyfrowane (/messages/e2ee) jako warstwę bez zmiany adresu. Tę rozpoznajemy po

@@ -81,7 +81,7 @@ Zielony przycisk bez wydawania: `$env:MESSY_FAKE_UPDATE="9.9.9"; npm start` (dzi
   certyfikatu (Azure Trusted Signing albo OV); użytkownik na razie z niego zrezygnował.
 - **Strona i grafiki:** `docs/` to GitHub Pages (https://parallax373.github.io/messy/), aktualizuje się samo po pushu.
   `npm run preview` renderuje `docs/preview.png` z makiety (bez prawdziwych rozmów), `npm run icons` PNG z `assets/*.svg`.
-- **Facebook zmienia stronę:** gdy coś się psuje po stronie wyglądu, zacznij od `npm run debug` (DevTools na porcie
+- **Facebook zmienia stronę:** gdy coś się psuje po stronie wyglądu, zacznij od `npm start` (DevTools zawsze na porcie
   9223) i sprawdź selektory: `aria-controls="mw-inbox-settings-menu"`, zmienne CSS `--header-height`,
   `--messenger-card-spacing`, pogrubienie (600+) nieprzeczytanych wierszy w `[role="row"]`.
 
