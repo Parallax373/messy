@@ -22,6 +22,7 @@ pub struct Strings {
 	pub window_menu: &'static str,
 	pub look_menu: &'static str,
 	pub hide_video_call: &'static str,
+	pub auto_upload: &'static str,
 	pub autostart: &'static str,
 	pub dev_tools: &'static str,
 	pub quit: &'static str,
@@ -42,6 +43,16 @@ pub struct PageStrings {
 	pub back_to_panel: &'static str,
 	pub update: &'static str,
 	pub update_hint: &'static str,
+	// Plik ponad limit Messengera wysyłany przez Gofile; {percent} i {error} podstawia strona.
+	pub upload_too_big: &'static str,
+	pub upload_send: &'static str,
+	pub upload_cancel: &'static str,
+	pub upload_progress: &'static str,
+	pub upload_error: &'static str,
+	pub upload_close: &'static str,
+	pub upload_dont_ask: &'static str,
+	pub upload_queue: &'static str,
+	pub upload_waiting: &'static str,
 }
 
 // {} w tekstach zastępuje fill().
@@ -66,6 +77,7 @@ const PL: Strings = Strings {
 	window_menu: "Okno",
 	look_menu: "Wygląd",
 	hide_video_call: "Ukryj przycisk rozmowy wideo",
+	auto_upload: "Pliki ponad 100 MB wysyłaj przez Gofile bez pytania",
 	autostart: "Uruchamiaj z Windowsem",
 	dev_tools: "Narzędzia deweloperskie",
 	quit: "Zakończ",
@@ -80,6 +92,15 @@ const PL: Strings = Strings {
 		back_to_panel: "Wróć do panelu nad zasobnikiem",
 		update: "Zaktualizuj do {version}",
 		update_hint: "Zaktualizuj do {version} (uruchomi ponownie Messy)",
+		upload_too_big: "Za duży dla Messengera (limit 100 MB). Wysłać przez Gofile i wkleić link?",
+		upload_send: "Wyślij przez Gofile",
+		upload_cancel: "Anuluj",
+		upload_progress: "Wysyłanie przez Gofile… {percent}%",
+		upload_error: "Nie udało się wysłać: {error}",
+		upload_close: "Zamknij",
+		upload_dont_ask: "Nie pytaj więcej",
+		upload_queue: "+{count} w kolejce",
+		upload_waiting: "Wiadomość wyjdzie razem z linkami",
 	},
 };
 
@@ -104,6 +125,7 @@ const EN: Strings = Strings {
 	window_menu: "Window",
 	look_menu: "Appearance",
 	hide_video_call: "Hide the video call button",
+	auto_upload: "Send files over 100 MB through Gofile without asking",
 	autostart: "Start with Windows",
 	dev_tools: "Developer tools",
 	quit: "Quit",
@@ -118,6 +140,15 @@ const EN: Strings = Strings {
 		back_to_panel: "Back to the panel above the tray",
 		update: "Update to {version}",
 		update_hint: "Update to {version} (restarts Messy)",
+		upload_too_big: "Too big for Messenger (100 MB limit). Send through Gofile and paste the link?",
+		upload_send: "Send through Gofile",
+		upload_cancel: "Cancel",
+		upload_progress: "Sending through Gofile… {percent}%",
+		upload_error: "Couldn't send: {error}",
+		upload_close: "Close",
+		upload_dont_ask: "Don't ask again",
+		upload_queue: "+{count} queued",
+		upload_waiting: "Your message will go out with the links",
 	},
 };
 

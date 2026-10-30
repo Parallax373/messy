@@ -3,6 +3,7 @@
 
 mod i18n;
 mod updater;
+mod upload;
 
 use std::fs;
 use std::path::PathBuf;
@@ -77,11 +78,13 @@ struct Settings {
 	edge_mode: bool,
 	// Bez przycisku rozmowy wideo w nagłówku rozmowy.
 	hide_video_call: bool,
+	// Pliki ponad limit Messengera idą do Gofile bez pytania (page/inject.js, „Nie pytaj więcej”).
+	auto_upload: bool,
 }
 
 impl Default for Settings {
 	fn default() -> Self {
-		Settings { muted: false, light: false, oled: false, pinned: false, translucent: true, window_mode: false, edge_mode: false, hide_video_call: false }
+		Settings { muted: false, light: false, oled: false, pinned: false, translucent: true, window_mode: false, edge_mode: false, hide_video_call: false, auto_upload: false }
 	}
 }
 
@@ -190,6 +193,7 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 				}
 			}
 			"hide_video_call" => settings.hide_video_call = value,
+			"auto_upload" => settings.auto_upload = value,
 			_ => return,
 		}
 		*settings
@@ -444,6 +448,12 @@ fn dock_to_nearest_edge(app: &AppHandle, window: &WebviewWindow) {
 }
 
 // Co 80 ms sprawdza, czy kursor jest nad oknem przy krawędzi: najechanie wysuwa, zjechanie na dłużej chowa.
+fn mouse_button_down() -> bool {
+	use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
+	// Najstarszy bit: przycisk jest teraz wciśnięty.
+	[VK_LBUTTON, VK_RBUTTON].iter().any(|key| unsafe { GetAsyncKeyState(i32::from(key.0)) } < 0)
+}
+
 fn edge_tick(app: &AppHandle) {
 	let st = state(app);
 	if !st.settings.lock().unwrap().edge_mode || *st.media_open.lock().unwrap() || st.drag_origin.lock().unwrap().is_some() {
@@ -467,7 +477,9 @@ fn edge_tick(app: &AppHandle) {
 		}
 		return;
 	}
-	if inside {
+	// Wciśnięty przycisk myszy poza oknem to zwykle przeciąganie (plik z Eksploratora, tekst, zdjęcie):
+	// okno czeka wysunięte, żeby było gdzie to upuścić.
+	if inside || mouse_button_down() {
 		*st.edge_leave_at.lock().unwrap() = None;
 		return;
 	}
@@ -667,6 +679,7 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		Box::new(PredefinedMenuItem::separator(app)?),
 		Box::new(CheckMenuItem::with_id(app, "muted", strings.mute, true, settings.muted, None::<&str>)?),
 		Box::new(CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?),
+		Box::new(CheckMenuItem::with_id(app, "auto_upload", strings.auto_upload, true, settings.auto_upload, None::<&str>)?),
 		Box::new(window_menu),
 		Box::new(look_menu),
 		Box::new(PredefinedMenuItem::separator(app)?),
@@ -706,6 +719,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 			show_window(app);
 		}
 		"hide_video_call" => set_setting_value(app, "hide_video_call", !settings.hide_video_call),
+		"auto_upload" => set_setting_value(app, "auto_upload", !settings.auto_upload),
 		"autostart" => {
 			let autolaunch = app.autolaunch();
 			let _ = if autolaunch.is_enabled().unwrap_or(false) { autolaunch.disable() } else { autolaunch.enable() };
@@ -820,6 +834,34 @@ fn hide_main_window(app: &AppHandle, window: &Window) {
 	let _ = window.hide();
 }
 
+// Panel stracił fokus: chowa się po puszczeniu przycisku myszy, chyba że puszczono go nad panelem.
+// Tak plik czy zdjęcie przeciągnięte z innego okna można upuścić w rozmowie; zwykły klik obok chowa panel jak dotąd.
+fn hide_after_mouse_up(app: AppHandle) {
+	std::thread::spawn(move || {
+		let started = Instant::now();
+		while mouse_button_down() && started.elapsed() < Duration::from_secs(60) {
+			std::thread::sleep(Duration::from_millis(20));
+		}
+		let Some(window) = main_window(&app) else {
+			return;
+		};
+		if !window.is_visible().unwrap_or(false) || window.is_focused().unwrap_or(false) {
+			return;
+		}
+		let (Ok(cursor), Ok(position), Ok(size)) = (window.cursor_position(), window.outer_position(), window.outer_size()) else {
+			return;
+		};
+		let (left, top) = (f64::from(position.x), f64::from(position.y));
+		let over = cursor.x >= left && cursor.x < left + f64::from(size.width) && cursor.y >= top && cursor.y < top + f64::from(size.height);
+		if over {
+			let _ = window.set_focus();
+			return;
+		}
+		*state(&app).hidden_by_blur_at.lock().unwrap() = Some(Instant::now());
+		hide_main_window(&app, &window.as_ref().window());
+	});
+}
+
 fn toggle_window(app: &AppHandle) {
 	let Some(window) = main_window(app) else {
 		return;
@@ -887,7 +929,7 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
 			let devtools_open = main_window(app).is_some_and(|window| window.is_devtools_open());
 			let settings = *state(app).settings.lock().unwrap();
 			// W trybie krawędzi okno chowa pętla najeżdżania, nie utrata fokusu.
-		let pinned = settings.pinned || settings.window_mode || settings.edge_mode;
+			let pinned = settings.pinned || settings.window_mode || settings.edge_mode;
 			// Okno nie ma ramki: chwycenie krawędzi do zmiany rozmiaru zabiera mu fokus. Wtedy nie chowamy,
 			// a po skończonym przeciąganiu oddajemy fokus, żeby klik obok znów chował panel.
 			if !devtools_open && !pinned && cursor_at_edge(window) {
@@ -895,8 +937,7 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
 				return;
 			}
 			if !devtools_open && !pinned && window.is_visible().unwrap_or(false) {
-				*state(app).hidden_by_blur_at.lock().unwrap() = Some(Instant::now());
-				hide_main_window(app, window);
+				hide_after_mouse_up(app.clone());
 			}
 		}
 		// Podgląd zdjęcia zajmuje cały obszar roboczy; tego położenia i rozmiaru nie zapamiętujemy.
@@ -936,6 +977,8 @@ fn create_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
 		.always_on_top(true)
 		// Przezroczyste okno: tło przypiętego, nieużywanego panelu prześwituje (page/style.css, messy-dim).
 		.transparent(true)
+		// Upuszczone pliki (np. zdjęcie z Eksploratora) dostaje strona, nie Tauri; inaczej nie trafiają do wiadomości.
+		.disable_drag_drop_handler()
 		.initialization_script(page_script())
 		.on_new_window(move |url, features| {
 			if is_call_window(&url) {
@@ -1043,7 +1086,7 @@ fn main() {
 		.plugin(tauri_plugin_notification::init())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_updater::Builder::new().build())
-		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window, set_typing])
+		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window, set_typing, upload::upload_chunk, upload::upload_file])
 		.on_window_event(on_window_event)
 		.setup(|app| {
 			let handle = app.handle();

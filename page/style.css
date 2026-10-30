@@ -34,6 +34,43 @@ html::after {
 	z-index: 2147483647;
 }
 html:not(.__fb-dark-mode)::after { border-color: rgba(0, 0, 0, 0.18); }
+/* Karta „plik za duży, wysłać przez Gofile?” (page/inject.js, showNextUpload): nad polem wiadomości, jak załącznik,
+   bez zaciemniania; rozmowa pod spodem dalej działa. Kolory ze zmiennych Messengera, więc pasuje do motywu. */
+#messy-upload { position: fixed; left: 12px; right: 12px; bottom: 68px; z-index: 2147483646; max-width: 460px; margin: 0 auto;
+	display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 10px 10px 10px 12px;
+	border-radius: 14px; background: var(--card-background, #242526); color: var(--primary-text, #e4e6eb);
+	border: 1px solid var(--media-inner-border, rgba(128, 128, 128, .25)); box-shadow: 0 6px 20px rgba(0, 0, 0, .3);
+	font: 13px/1.35 system-ui, sans-serif; animation: messy-upload-in .18s ease-out; }
+@keyframes messy-upload-in { from { opacity: 0; transform: translateY(8px); } }
+.messy-upload-icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+	background: var(--comment-background, rgba(128, 128, 128, .2)); color: var(--primary-button-background, #0866ff); }
+.messy-upload-failed .messy-upload-icon { color: #e0102f; }
+.messy-upload-body { min-width: 0; display: grid; gap: 3px; }
+.messy-upload-name { display: flex; gap: 6px; align-items: baseline; min-width: 0; font-weight: 600; }
+.messy-upload-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.messy-upload-name small { flex: none; font-weight: 400; color: var(--secondary-text, #b0b3b8); font-variant-numeric: tabular-nums; }
+.messy-upload-text { color: var(--secondary-text, #b0b3b8); font-variant-numeric: tabular-nums; }
+.messy-upload-queue { flex: none; margin-left: auto; font-style: normal; font-weight: 400; color: var(--secondary-text, #b0b3b8); }
+.messy-upload-dont-ask { display: flex; align-items: center; gap: 6px; width: fit-content; color: var(--secondary-text, #b0b3b8); cursor: pointer; }
+.messy-upload-dont-ask[hidden], .messy-upload-waiting[hidden] { display: none; }
+.messy-upload-waiting { color: var(--primary-button-background, #0866ff); font-weight: 600; }
+.messy-upload-dont-ask input { margin: 0; accent-color: var(--primary-button-background, #0866ff); }
+.messy-upload-failed .messy-upload-text { color: #f02849; }
+.messy-upload-bar { height: 4px; border-radius: 2px; background: var(--comment-background, rgba(128, 128, 128, .3)); overflow: hidden; }
+.messy-upload-bar > div { width: 0; height: 100%; background: var(--primary-button-background, #0866ff); transition: width .2s; }
+.messy-upload-bar[hidden], .messy-upload-buttons button[hidden] { display: none; }
+.messy-upload-buttons { display: flex; gap: 6px; }
+.messy-upload-buttons button { padding: 7px 12px; border: 0; border-radius: 8px; font: 600 13px system-ui, sans-serif; cursor: pointer;
+	white-space: nowrap; background: var(--secondary-button-background, rgba(128, 128, 128, .25)); color: inherit; }
+.messy-upload-buttons .messy-upload-send { background: var(--primary-button-background, #0866ff); color: #fff; }
+.messy-upload-buttons button:hover { filter: brightness(1.12); }
+.messy-upload-buttons button:focus-visible { outline: 2px solid var(--primary-button-background, #0866ff); outline-offset: 2px; }
+/* Wąskie okno: przyciski pod tekstem. */
+@media (max-width: 420px) {
+	#messy-upload { grid-template-columns: auto 1fr; }
+	.messy-upload-buttons { grid-column: 1 / -1; justify-content: flex-end; }
+}
+@media (prefers-reduced-motion: reduce) { #messy-upload { animation: none; } }
 /* Okno zwinięte do zakładki (tryb krawędzi) jest przezroczyste, więc bez obwódki i znaczka DEV. */
 html.messy-edge-collapsed::after, html.messy-edge-collapsed::before { display: none; }
 
