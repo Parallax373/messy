@@ -19,6 +19,7 @@
 		"allow-upload-file",
 		"allow-upload-cancel",
 		"allow-set-mode",
-		"allow-notify-message"
+		"allow-notify-message",
+		"allow-set-hide-speed-from-page"
 	]
 }

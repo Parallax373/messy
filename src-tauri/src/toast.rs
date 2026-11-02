@@ -153,11 +153,12 @@ fn place(app: &AppHandle, height: f64) {
 	}
 }
 
-// Nowa wiadomość z page/inject.js: dymek tylko wtedy, gdy okna Messy nie widać, nie w trybie okna i nie przy wyciszeniu.
+// Nowa wiadomość z page/inject.js: dymek tylko wtedy, gdy okna Messy nie widać, nie w trybie okna, nie przy wyciszeniu
+// i gdy dymki są włączone (menu ikony, Powiadomienia).
 pub fn show(app: &AppHandle, message: Message) {
 	let st = state(app);
 	let settings = *st.settings.lock().unwrap();
-	if settings.muted || settings.window_mode {
+	if settings.muted || settings.window_mode || !settings.toasts {
 		return;
 	}
 	let visible = main_window(app).is_some_and(|window| window.is_visible().unwrap_or(false));

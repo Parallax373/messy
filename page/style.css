@@ -147,6 +147,10 @@ html.messy-no-video .messy-video-cell { display: none !important; }
 /* Przezroczystość (tylko w trybie swobodnym): pod trybami, oddzielona kreską. */
 #messy-mode-menu .messy-mode-option { grid-template-columns: 16px 1fr; margin-top: 4px; padding-top: 10px; border-radius: 0 0 6px 6px;
 	border-top: 1px solid var(--media-inner-border, rgba(128, 128, 128, .2)); }
+/* Szybkość chowania (tylko w trybie krawędzi): nagłówek pod trybami, oddzielony kreską, i trzy opcje. */
+#messy-mode-menu .messy-mode-label { margin-top: 4px; padding: 10px 8px 2px; border-top: 1px solid var(--media-inner-border, rgba(128, 128, 128, .2));
+	font-size: 12px; color: var(--secondary-text, #b0b3b8); }
+#messy-mode-menu .messy-mode-speed { grid-template-columns: 16px 1fr; padding: 6px 8px; }
 @media (prefers-reduced-motion: reduce) { #messy-mode-menu { animation: none; } }
 /* Okienko emoji przeniesione nad pole wiadomości (page/inject.js, fixOffscreenPopups): bez strzałki do przycisku,
    wszystkie rogi zaokrąglone, szerokość jak treść, prawą krawędzią przy przycisku. */

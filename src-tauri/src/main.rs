@@ -79,6 +79,8 @@ struct Settings {
 	edge_mode: bool,
 	// Bez przycisku rozmowy wideo w nagłówku rozmowy.
 	hide_video_call: bool,
+	// Dymki Messy (src/toast.rs); wyłączone: zwykłe powiadomienia Windowsa jak w trybie okna.
+	toasts: bool,
 	// Pliki ponad limit Messengera idą do Gofile bez pytania (page/inject.js, „Nie pytaj więcej”).
 	auto_upload: bool,
 	// Jak szybko okno przy krawędzi chowa się po zjechaniu kursora i jak długo widać dymki (src/toast.rs).
@@ -116,7 +118,7 @@ impl HideSpeed {
 
 impl Default for Settings {
 	fn default() -> Self {
-		Settings { muted: false, light: false, oled: false, pinned: false, translucent: true, window_mode: false, edge_mode: false, hide_video_call: false, auto_upload: false, hide_speed: HideSpeed::Normal }
+		Settings { muted: false, light: false, oled: false, pinned: false, translucent: true, window_mode: false, edge_mode: false, hide_video_call: false, toasts: true, auto_upload: false, hide_speed: HideSpeed::Normal }
 	}
 }
 
@@ -227,6 +229,7 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 				}
 			}
 			"hide_video_call" => settings.hide_video_call = value,
+			"toasts" => settings.toasts = value,
 			"auto_upload" => settings.auto_upload = value,
 			_ => return,
 		}
@@ -282,6 +285,12 @@ fn set_mode_value(app: &AppHandle, mode: &str) {
 	build_tray_menu(app);
 	// show_window ustawia okno według trybu i je pokazuje (przy krawędzi wysunięte).
 	show_window(app);
+}
+
+// Menu trybów na stronie (przy trybie krawędzi): speed to 'slow' | 'normal' | 'fast'.
+#[tauri::command]
+fn set_hide_speed_from_page(app: AppHandle, speed: HideSpeed) {
+	set_hide_speed(&app, speed);
 }
 
 // Menu ikony, „Chowanie okna i dymków”. Klik w zaznaczoną pozycję zostawia ją zaznaczoną (menu budujemy od nowa).
@@ -816,9 +825,9 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		&PredefinedMenuItem::separator(app)?,
 		&CheckMenuItem::with_id(app, "translucent", strings.translucent, mode == "free", settings.translucent, None::<&str>)?,
 		&Submenu::with_items(app, strings.hide_speed_menu, true, &[
-			&CheckMenuItem::with_id(app, "hide_slow", strings.hide_slow, true, settings.hide_speed == HideSpeed::Slow, None::<&str>)?,
-			&CheckMenuItem::with_id(app, "hide_normal", strings.hide_normal, true, settings.hide_speed == HideSpeed::Normal, None::<&str>)?,
-			&CheckMenuItem::with_id(app, "hide_fast", strings.hide_fast, true, settings.hide_speed == HideSpeed::Fast, None::<&str>)?,
+			&CheckMenuItem::with_id(app, "hide_slow", page.hide_slow, true, settings.hide_speed == HideSpeed::Slow, None::<&str>)?,
+			&CheckMenuItem::with_id(app, "hide_normal", page.hide_normal, true, settings.hide_speed == HideSpeed::Normal, None::<&str>)?,
+			&CheckMenuItem::with_id(app, "hide_fast", page.hide_fast, true, settings.hide_speed == HideSpeed::Fast, None::<&str>)?,
 		])?,
 	])?;
 	// Podmenu „Wygląd”: kolory i przyciski na stronie.
@@ -833,7 +842,10 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		Box::new(PredefinedMenuItem::separator(app)?),
 		Box::new(MenuItem::with_id(app, "show", strings.show, true, None::<&str>)?),
 		Box::new(PredefinedMenuItem::separator(app)?),
-		Box::new(CheckMenuItem::with_id(app, "muted", strings.mute, true, settings.muted, None::<&str>)?),
+		Box::new(Submenu::with_items(app, strings.notifications_menu, true, &[
+			&CheckMenuItem::with_id(app, "muted", strings.mute, true, settings.muted, None::<&str>)?,
+			&CheckMenuItem::with_id(app, "toasts", strings.toasts, !settings.muted, settings.toasts, None::<&str>)?,
+		])?),
 		Box::new(CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?),
 		Box::new(CheckMenuItem::with_id(app, "auto_upload", strings.auto_upload, true, settings.auto_upload, None::<&str>)?),
 		Box::new(window_menu),
@@ -864,6 +876,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 		id if id.starts_with("mode_") => set_mode_value(app, &id["mode_".len()..]),
 		"hide_video_call" => set_setting_value(app, "hide_video_call", !settings.hide_video_call),
 		"auto_upload" => set_setting_value(app, "auto_upload", !settings.auto_upload),
+		"toasts" => set_setting_value(app, "toasts", !settings.toasts),
 		"hide_slow" => set_hide_speed(app, HideSpeed::Slow),
 		"hide_normal" => set_hide_speed(app, HideSpeed::Normal),
 		"hide_fast" => set_hide_speed(app, HideSpeed::Fast),
@@ -1234,7 +1247,7 @@ fn main() {
 		.plugin(tauri_plugin_notification::init())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_updater::Builder::new().build())
-		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window, set_typing, upload::upload_chunk, upload::upload_file, upload::upload_cancel, set_mode, notify_message])
+		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window, set_typing, upload::upload_chunk, upload::upload_file, upload::upload_cancel, set_mode, notify_message, set_hide_speed_from_page])
 		.on_window_event(on_window_event)
 		.setup(|app| {
 			let handle = app.handle();

@@ -63,11 +63,11 @@
 
 	// Facebook może pamiętać zgodę na powiadomienia sprzed wyciszenia, więc podczas wyciszenia
 	// zamiast systemowego dymka zwracamy atrapę z tym samym interfejsem. Poza trybem okna systemowy dymek
-	// zastępują dymki Messy (src-tauri/src/toast.rs).
+	// zastępują dymki Messy (src-tauri/src/toast.rs), chyba że je wyłączono.
 	const NativeNotification = window.Notification;
 	window.Notification = new Proxy(NativeNotification, {
 		construct(target, args) {
-			if (!settings.muted && settings.window_mode) {
+			if (!settings.muted && (settings.window_mode || !settings.toasts)) {
 				return new target(...args);
 			}
 
@@ -286,6 +286,28 @@
 					window.messy.setSetting('translucent', !settings.translucent);
 				});
 				menu.append(item);
+			}
+			// Szybkość chowania dotyczy trybu krawędzi (i dymków, ustawienie jest też w menu ikony).
+			if (mode === 'edge') {
+				const label = document.createElement('div');
+				label.className = 'messy-mode-label';
+				label.textContent = strings.hideSpeed;
+				menu.append(label);
+				for (const [speed, text] of [['slow', strings.hideSlow], ['normal', strings.hideNormal], ['fast', strings.hideFast]]) {
+					const on = (settings.hide_speed ?? 'normal') === speed;
+					const item = document.createElement('button');
+					item.type = 'button';
+					item.className = 'messy-mode-speed';
+					item.setAttribute('role', 'menuitemradio');
+					item.setAttribute('aria-checked', String(on));
+					item.innerHTML = `<span class="messy-mode-check">${on ? svgIcon(CHECK, 16) : ''}</span><span></span>`;
+					item.lastChild.textContent = text;
+					item.addEventListener('click', () => {
+						closeModeMenu();
+						window.messy.setHideSpeed(speed);
+					});
+					menu.append(item);
+				}
 			}
 			document.body.append(menu);
 			// Pod przyciskiem, wyrównane do jego prawej krawędzi; bez miejsca pod spodem nad przyciskiem.
