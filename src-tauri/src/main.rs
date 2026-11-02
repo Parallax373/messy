@@ -842,14 +842,17 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		Box::new(PredefinedMenuItem::separator(app)?),
 		Box::new(MenuItem::with_id(app, "show", strings.show, true, None::<&str>)?),
 		Box::new(PredefinedMenuItem::separator(app)?),
+		// Wszystkie ustawienia w podmenu, bez luźnych przełączników między nimi.
+		Box::new(window_menu),
+		Box::new(look_menu),
 		Box::new(Submenu::with_items(app, strings.notifications_menu, true, &[
 			&CheckMenuItem::with_id(app, "muted", strings.mute, true, settings.muted, None::<&str>)?,
 			&CheckMenuItem::with_id(app, "toasts", strings.toasts, !settings.muted, settings.toasts, None::<&str>)?,
 		])?),
-		Box::new(CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?),
-		Box::new(CheckMenuItem::with_id(app, "auto_upload", strings.auto_upload, true, settings.auto_upload, None::<&str>)?),
-		Box::new(window_menu),
-		Box::new(look_menu),
+		Box::new(Submenu::with_items(app, strings.general_menu, true, &[
+			&CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?,
+			&CheckMenuItem::with_id(app, "auto_upload", strings.auto_upload, true, settings.auto_upload, None::<&str>)?,
+		])?),
 		Box::new(PredefinedMenuItem::separator(app)?),
 	];
 	// Narzędzia deweloperskie tylko w wersji deweloperskiej; w wydaniu nikt ich nie potrzebuje.
