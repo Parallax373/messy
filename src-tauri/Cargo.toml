@@ -23,7 +23,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sys-locale = "0.3"
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["time", "fs", "io-util"] }
 url = "2"
 webview2-com = "0.39"
 # DwmFlush: animacja okna w trybie krawędzi zsynchronizowana z odświeżaniem monitora. Wersja ta sama co w wry.

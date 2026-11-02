@@ -57,6 +57,9 @@ pub struct PageStrings {
 	pub upload_dont_ask: &'static str,
 	pub upload_queue: &'static str,
 	pub upload_waiting: &'static str,
+	// Link gotowy, ale nie wkleił się sam (w chwili końca była otwarta inna rozmowa); {link} podstawia strona.
+	pub upload_elsewhere: &'static str,
+	pub upload_paste_here: &'static str,
 }
 
 // {} w tekstach zastępuje fill().
@@ -108,6 +111,8 @@ const PL: Strings = Strings {
 		upload_dont_ask: "Nie pytaj więcej",
 		upload_queue: "+{count} w kolejce",
 		upload_waiting: "Wiadomość wyjdzie razem z linkami",
+		upload_elsewhere: "Wysłano. Wklej link do rozmowy: {link}",
+		upload_paste_here: "Wklej tutaj",
 	},
 };
 
@@ -159,6 +164,8 @@ const EN: Strings = Strings {
 		upload_dont_ask: "Don't ask again",
 		upload_queue: "+{count} queued",
 		upload_waiting: "Your message will go out with the links",
+		upload_elsewhere: "Sent. Paste the link into the chat: {link}",
+		upload_paste_here: "Paste here",
 	},
 };
 

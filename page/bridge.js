@@ -15,6 +15,9 @@
 		}
 	};
 
+	// Numer trwającego wysyłania pliku; 0 po anulowaniu (src-tauri/src/upload.rs).
+	let uploadId = 0;
+
 	window.messy = {
 		getSettings: () => invoke('get_settings'),
 		setSetting: (key, value) => invoke('set_setting', {key, value}),
@@ -42,16 +45,25 @@
 		// Plik idzie do Messy kawałkami po 2 MB w base64, potem jedno polecenie go wysyła.
 		uploadFile: async file => {
 			const CHUNK = 2 * 1024 * 1024;
+			const id = Date.now();
+			uploadId = id;
 			for (let offset = 0; offset < file.size; offset += CHUNK) {
+				if (uploadId !== id) {
+					throw new Error('cancelled');
+				}
 				const data = await new Promise((resolve, reject) => {
 					const reader = new FileReader();
 					reader.onload = () => resolve(reader.result.slice(reader.result.indexOf(',') + 1));
 					reader.onerror = () => reject(reader.error);
 					reader.readAsDataURL(file.slice(offset, offset + CHUNK));
 				});
-				await invoke('upload_chunk', {data, first: offset === 0});
+				await invoke('upload_chunk', {data, first: offset === 0, id});
 			}
-			return invoke('upload_file', {name: file.name});
+			return invoke('upload_file', {name: file.name, id});
+		},
+		cancelUpload: () => {
+			uploadId = 0;
+			return invoke('upload_cancel');
 		},
 		// Postęp wysyłania w procentach.
 		onUploadProgress: callback => listeners['upload-progress'].push(callback),

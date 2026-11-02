@@ -547,8 +547,27 @@
 		const fillText = (text, values) => text.replace(/\{(\w+)\}/g, (match, key) => values[key] ?? match);
 		const uploadQueue = [];
 		let uploadDialog = null;
+		let uploadDialogChat = null;
+		// Pole wiadomości widoczne na ekranie. Sam adres nie wystarczy: w wąskim oknie „Wstecz” pokazuje listę czatów,
+		// a adres może zostać ten sam, a pole ukrytej rozmowy dalej jest w dokumencie.
+		const visibleComposer = () => [...document.querySelectorAll('[role="textbox"][contenteditable="true"]')].find(box => {
+			const rect = box.getBoundingClientRect();
+			return box.checkVisibility({visibilityProperty: true}) && rect.width > 0 && rect.left >= 0 && rect.right <= innerWidth;
+		});
+		// Adres otwartej rozmowy albo null, gdy na ekranie nie ma rozmowy.
+		const openChat = () => visibleComposer() ? location.pathname.replace(/\/$/, '') : null;
+		// Karta należy do rozmowy, w której wybrano plik: poza nią jej nie widać, a wysyłanie trwa dalej. Wyjątki: plik
+		// upuszczony poza rozmową (chat: null) nie ma swojej rozmowy, a plik czekający tutaj musi mieć gdzie się pokazać.
+		const syncUploadCard = () => {
+			if (uploadDialog) {
+				const chat = openChat();
+				uploadDialog.hidden = uploadDialogChat !== null && uploadDialogChat !== chat && !uploadQueue.some(item => item.chat === chat);
+			}
+		};
+		setInterval(syncUploadCard, 300);
 		const offerUpload = files => {
-			uploadQueue.push(...files);
+			// Link ma trafić do rozmowy, w której wybrano plik.
+			uploadQueue.push(...files.map(file => ({file, chat: openChat()})));
 			if (uploadDialog) {
 				showQueue();
 			} else {
@@ -565,11 +584,13 @@
 		};
 
 		// Wysłanie wiadomości (Enter albo przycisk) w trakcie wysyłania plików czeka, aż wszystkie linki trafią
-		// do pola; wtedy Messy sam klika „wyślij” i tekst idzie razem z linkami.
+		// do pola; wtedy Messy sam klika „wyślij” i tekst idzie razem z linkami. W innej rozmowie wiadomości idą normalnie.
 		let uploading = false;
+		let uploadChat = null;
 		let sendWhenDone = false;
+		const holdingSend = () => uploading && uploadChat !== null && openChat() === uploadChat;
 		// Przycisk wysyłania Messengera ma w opisie „Enter” („Naciśnij Enter, aby wysłać” / „Press enter to send”).
-		const findSendButton = () => [...document.querySelectorAll('[role="button"][aria-label]')].find(button => /enter/i.test(button.getAttribute('aria-label')));
+		const findSendButton = () => [...document.querySelectorAll('[role="button"][aria-label]')].find(button => /\benter\b/i.test(button.getAttribute('aria-label')));
 		const holdSend = event => {
 			event.preventDefault();
 			event.stopImmediatePropagation();
@@ -577,12 +598,12 @@
 			showQueue();
 		};
 		document.addEventListener('keydown', event => {
-			if (uploading && event.key === 'Enter' && !event.shiftKey && event.target instanceof HTMLElement && event.target.closest('[role="textbox"][contenteditable="true"]')) {
+			if (holdingSend() && event.key === 'Enter' && !event.shiftKey && event.target instanceof HTMLElement && event.target.closest('[role="textbox"][contenteditable="true"]')) {
 				holdSend(event);
 			}
 		}, true);
 		document.addEventListener('click', event => {
-			if (uploading && event.isTrusted && event.target instanceof Element && event.target.closest('[role="button"]') === findSendButton()) {
+			if (holdingSend() && event.isTrusted && event.target instanceof Element && event.target.closest('[role="button"]') === findSendButton()) {
 				holdSend(event);
 			}
 		}, true);
@@ -603,23 +624,26 @@
 		});
 		// Do pola wiadomości trafia nazwa, rozmiar i link; wysyłasz to sam (Enter), jak zwykłą wiadomość.
 		const pasteLink = (file, link) => {
-			const composer = document.querySelector('[role="textbox"][contenteditable="true"]');
-			if (composer) {
-				composer.focus();
-				document.execCommand('insertText', false, `${file.name} (${formatSize(file.size)}): ${link} `);
+			const composer = visibleComposer();
+			if (!composer) {
+				return false;
 			}
+			composer.focus();
+			document.execCommand('insertText', false, `${file.name} (${formatSize(file.size)}): ${link} `);
+			return true;
 		};
 		// Karta nad polem wiadomości, bez zasłaniania rozmowy: można dalej pisać i przewijać, także w trakcie wysyłania.
 		const FILE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M6 2h8l6 6v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm7 1.5V9h5.5L13 3.5Z"/></svg>';
 		function showNextUpload() {
 			uploadDialog?.remove();
 			uploadDialog = null;
-			const file = uploadQueue.shift();
-			if (!file || !strings) {
-				uploading = false;
+			uploading = false;
+			const next = uploadQueue.shift();
+			if (!next || !strings) {
 				sendHeldMessage();
 				return;
 			}
+			const {file, chat} = next;
 			const card = document.createElement('div');
 			card.id = 'messy-upload';
 			card.setAttribute('role', 'status');
@@ -643,34 +667,74 @@
 			text.textContent = strings.uploadTooBig;
 			cancel.textContent = strings.uploadCancel;
 			send.textContent = strings.uploadSend;
-			cancel.addEventListener('click', showNextUpload);
+			// Co robią przyciski, zmienia się z etapem wysyłania.
+			let onCancel = showNextUpload;
+			let onSend = () => start();
+			cancel.addEventListener('click', () => onCancel());
+			send.addEventListener('click', () => onSend());
+			// Link czeka na karcie, gdy nie ma go gdzie bezpiecznie wkleić: otwarta jest inna rozmowa albo sama lista czatów.
+			// Nie wklejamy go sam po powrocie, bo tuż po zmianie adresu w stronie może jeszcze stać pole poprzedniej rozmowy.
+			const offerLink = link => {
+				uploading = false;
+				sendWhenDone = false;
+				showQueue();
+				bar.hidden = true;
+				text.textContent = fillText(strings.uploadElsewhere, {link});
+				cancel.textContent = strings.uploadClose;
+				send.textContent = strings.uploadPasteHere;
+				send.hidden = false;
+				onCancel = showNextUpload;
+				onSend = () => {
+					if (pasteLink(file, link)) {
+						showNextUpload();
+					}
+				};
+			};
 			const start = async () => {
 				// „Nie pytaj więcej” zapisuje ustawienie; wyłącza się je w menu ikony.
 				if (dontAsk.querySelector('input').checked) {
 					window.messy.setSetting('auto_upload', true);
 				}
 				uploading = true;
+				uploadChat = chat;
 				dontAsk.hidden = true;
 				send.hidden = true;
-				cancel.hidden = true;
 				bar.hidden = false;
 				text.textContent = fillText(strings.uploadProgress, {percent: 0});
-				try {
-					pasteLink(file, await window.messy.uploadFile(file));
+				// Anulowanie zamyka kartę od razu; wynik przerwanego wysyłania już nic nie zmienia.
+				let cancelled = false;
+				onCancel = () => {
+					cancelled = true;
+					window.messy.cancelUpload();
 					showNextUpload();
+				};
+				try {
+					const link = await window.messy.uploadFile(file);
+					if (cancelled) {
+						return;
+					}
+					if (chat !== null && openChat() === chat && pasteLink(file, link)) {
+						showNextUpload();
+					} else {
+						offerLink(link);
+					}
 				} catch (error) {
+					if (cancelled) {
+						return;
+					}
 					// Wstrzymana wiadomość wyjdzie po zamknięciu karty z błędem (bez tego linku).
 					uploading = false;
 					bar.hidden = true;
 					card.classList.add('messy-upload-failed');
 					text.textContent = fillText(strings.uploadError, {error: String(error)});
 					cancel.textContent = strings.uploadClose;
-					cancel.hidden = false;
+					onCancel = showNextUpload;
 				}
 			};
-			send.addEventListener('click', start);
 			document.body.append(card);
 			uploadDialog = card;
+			uploadDialogChat = chat;
+			syncUploadCard();
 			showQueue();
 			if (settings.auto_upload) {
 				start();
@@ -922,10 +986,10 @@
 		}
 
 		// Po długim schowaniu Messy otwiera się na liście czatów, ale nie wtedy, gdy w polu wiadomości jest
-		// niewysłany tekst (przeładowanie strony by go skasowało).
+		// niewysłany tekst albo karta wysyłania pliku (przeładowanie strony by je skasowało).
 		window.messy.onBackToList(() => {
 			const draft = [...document.querySelectorAll('[role="textbox"][contenteditable="true"]')].some(box => box.textContent.trim());
-			if (!draft) {
+			if (!draft && !uploadDialog) {
 				location.assign('/messages/');
 			}
 		});

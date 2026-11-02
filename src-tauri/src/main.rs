@@ -32,6 +32,8 @@ const TRAY_ID: &str = "tray";
 const BACK_TO_LIST_AFTER: Duration = Duration::from_secs(10 * 60);
 // Tryb krawędzi: tyle pikseli logicznych okna zostaje widoczne na ekranie, gdy jest schowane.
 const EDGE_STRIP: f64 = 16.0;
+// Długość zakładki wzdłuż krawędzi w pikselach logicznych (#messy-edge-strip w page/style.css).
+const EDGE_TAB_LENGTH: f64 = 150.0;
 // Tak długo kursor musi być poza oknem, zanim schowa się przy krawędzi.
 const EDGE_HIDE_DELAY: Duration = Duration::from_millis(600);
 
@@ -363,6 +365,18 @@ fn edge_target(saved: Option<&EdgeDock>, monitor: &Monitor, size: PhysicalSize<u
 	}
 }
 
+// Domyślne miejsce przy krawędzi: pierwsza bez sąsiedniego monitora, na środku obszaru roboczego.
+fn default_dock(window: &WebviewWindow, monitor: &Monitor, size: PhysicalSize<u32>) -> EdgeDock {
+	let edge = [Edge::Right, Edge::Left, Edge::Top, Edge::Bottom].into_iter().find(|edge| !edge_touches_monitor(window, monitor, *edge)).unwrap_or(Edge::Right);
+	let area = monitor.work_area();
+	let offset = if matches!(edge, Edge::Left | Edge::Right) {
+		area.position.y + (area.size.height as i32 - size.height as i32) / 2
+	} else {
+		area.position.x + (area.size.width as i32 - size.width as i32) / 2
+	};
+	EdgeDock { edge, offset, monitor: (monitor.position().x, monitor.position().y) }
+}
+
 // Ustawia rozmiar z zapisanego (przycięty do obszaru roboczego) i miejsce przy krawędzi, wysunięte albo schowane.
 fn place_on_edge(app: &AppHandle, window: &WebviewWindow) {
 	let saved = read_json::<EdgeDock>(app, "edge-dock.json");
@@ -377,8 +391,16 @@ fn place_on_edge(app: &AppHandle, window: &WebviewWindow) {
 	let height = (stored.height * scale).min(f64::from(area.size.height) - 2.0 * margin).round() as u32;
 	let size = PhysicalSize::new(width, height);
 	let expanded = *state(app).edge_expanded.lock().unwrap();
+	// Pierwsze wejście w tryb krawędzi: miejsce zapisujemy od razu. Schowane okno leży poza swoim ekranem, więc bez
+	// zapisu kolejne pytanie o jego monitor mogłoby wskazać sąsiedni i okno by tam uciekło.
+	let dock = saved.unwrap_or_else(|| {
+		let dock = default_dock(window, &monitor, size);
+		write_json(app, "edge-dock.json", &dock);
+		emit_edge_state(app);
+		dock
+	});
 	let _ = window.set_size(size);
-	let _ = window.set_position(edge_target(saved.as_ref(), &monitor, size, expanded));
+	let _ = window.set_position(edge_target(Some(&dock), &monitor, size, expanded));
 }
 
 // Płynnie przesuwa okno na miejsce (8 kroków co 15 ms, na początku szybko); nowsze przesunięcie przerywa starsze.
@@ -495,6 +517,24 @@ fn mouse_button_down() -> bool {
 	[VK_LBUTTON, VK_RBUTTON].iter().any(|key| unsafe { GetAsyncKeyState(i32::from(key.0)) } < 0)
 }
 
+// Czy kursor jest nad zakładką schowanego okna. Reszta okna jest niewidoczna i leży poza obszarem roboczym
+// (na pasku zadań, na sąsiednim monitorze), więc nie może go wysuwać.
+fn over_edge_tab(app: &AppHandle, window: &WebviewWindow, cursor: PhysicalPosition<f64>, position: PhysicalPosition<i32>, size: PhysicalSize<u32>) -> bool {
+	let edge = read_json::<EdgeDock>(app, "edge-dock.json").map_or(Edge::Right, |dock| dock.edge);
+	let scale = window.scale_factor().unwrap_or(1.0);
+	let (strip, half_length) = (EDGE_STRIP * scale, EDGE_TAB_LENGTH * scale / 2.0);
+	let (left, top) = (f64::from(position.x), f64::from(position.y));
+	let (width, height) = (f64::from(size.width), f64::from(size.height));
+	let along_x = (cursor.x - (left + width / 2.0)).abs() < half_length;
+	let along_y = (cursor.y - (top + height / 2.0)).abs() < half_length;
+	match edge {
+		Edge::Right => along_y && cursor.x < left + strip,
+		Edge::Left => along_y && cursor.x >= left + width - strip,
+		Edge::Top => along_x && cursor.y >= top + height - strip,
+		Edge::Bottom => along_x && cursor.y < top + strip,
+	}
+}
+
 fn edge_tick(app: &AppHandle) {
 	let st = state(app);
 	if !st.settings.lock().unwrap().edge_mode || *st.media_open.lock().unwrap() || st.drag_origin.lock().unwrap().is_some() {
@@ -513,7 +553,7 @@ fn edge_tick(app: &AppHandle) {
 	let inside = cursor.x >= left && cursor.x < left + f64::from(size.width) && cursor.y >= top && cursor.y < top + f64::from(size.height);
 	let expanded = *st.edge_expanded.lock().unwrap();
 	if !expanded {
-		if inside {
+		if inside && over_edge_tab(app, &window, cursor, position, size) {
 			set_edge_expanded(app, &window, true);
 		}
 		return;
@@ -1117,10 +1157,11 @@ fn main() {
 		.plugin(tauri_plugin_notification::init())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_updater::Builder::new().build())
-		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window, set_typing, upload::upload_chunk, upload::upload_file, set_mode])
+		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window, set_typing, upload::upload_chunk, upload::upload_file, upload::upload_cancel, set_mode])
 		.on_window_event(on_window_event)
 		.setup(|app| {
 			let handle = app.handle();
+			upload::cleanup();
 			let first_run = !config_file(handle, "settings.json").exists();
 			app.manage(AppState {
 				settings: Mutex::new(read_json(handle, "settings.json").unwrap_or_default()),

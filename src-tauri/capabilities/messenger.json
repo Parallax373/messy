@@ -17,6 +17,7 @@
 		"allow-set-typing",
 		"allow-upload-chunk",
 		"allow-upload-file",
+		"allow-upload-cancel",
 		"allow-set-mode"
 	]
 }

@@ -41,6 +41,7 @@ html:not(.__fb-dark-mode)::after { border-color: rgba(0, 0, 0, 0.18); }
 	border-radius: 14px; background: var(--card-background, #242526); color: var(--primary-text, #e4e6eb);
 	border: 1px solid var(--media-inner-border, rgba(128, 128, 128, .25)); box-shadow: 0 6px 20px rgba(0, 0, 0, .3);
 	font: 13px/1.35 system-ui, sans-serif; animation: messy-upload-in .18s ease-out; }
+#messy-upload[hidden] { display: none; }
 @keyframes messy-upload-in { from { opacity: 0; transform: translateY(8px); } }
 .messy-upload-icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
 	background: var(--comment-background, rgba(128, 128, 128, .2)); color: var(--primary-button-background, #0866ff); }
@@ -49,7 +50,7 @@ html:not(.__fb-dark-mode)::after { border-color: rgba(0, 0, 0, 0.18); }
 .messy-upload-name { display: flex; gap: 6px; align-items: baseline; min-width: 0; font-weight: 600; }
 .messy-upload-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .messy-upload-name small { flex: none; font-weight: 400; color: var(--secondary-text, #b0b3b8); font-variant-numeric: tabular-nums; }
-.messy-upload-text { color: var(--secondary-text, #b0b3b8); font-variant-numeric: tabular-nums; }
+.messy-upload-text { color: var(--secondary-text, #b0b3b8); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; user-select: text; }
 .messy-upload-queue { flex: none; margin-left: auto; font-style: normal; font-weight: 400; color: var(--secondary-text, #b0b3b8); }
 .messy-upload-dont-ask { display: flex; align-items: center; gap: 6px; width: fit-content; color: var(--secondary-text, #b0b3b8); cursor: pointer; }
 .messy-upload-dont-ask[hidden], .messy-upload-waiting[hidden] { display: none; }
