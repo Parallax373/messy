@@ -7,7 +7,7 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Monitor, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-use crate::{dock_monitor, main_window, read_json, state, Edge, EdgeDock, MARGIN};
+use crate::{dock_monitor, main_window, read_json, state, Edge, EdgeDock, EDGE_STRIP, EDGE_TAB_LENGTH, MARGIN};
 
 const LABEL: &str = "toast";
 const WIDTH: f64 = 360.0;
@@ -91,21 +91,27 @@ pub fn create(app: &AppHandle) -> tauri::Result<WebviewWindow> {
 		.build()
 }
 
-// Monitor i krawędź, od której wjeżdżają dymki.
-fn anchor(app: &AppHandle) -> Option<(Monitor, Edge)> {
+// Monitor, krawędź, od której wjeżdżają dymki, i w trybie krawędzi środek zakładki schowanego okna (piksele fizyczne).
+fn anchor(app: &AppHandle) -> Option<(Monitor, Edge, Option<PhysicalPosition<i32>>)> {
 	let main = main_window(app)?;
 	if state(app).settings.lock().unwrap().edge_mode {
 		let saved = read_json::<EdgeDock>(app, "edge-dock.json");
 		let monitor = dock_monitor(&main, saved.as_ref())?;
-		return Some((monitor, saved.map_or(Edge::Right, |dock| dock.edge)));
+		// Zakładka leży na środku boku okna zwróconego do ekranu (main.rs, over_edge_tab).
+		let tab = match (main.outer_position(), main.outer_size()) {
+			(Ok(position), Ok(size)) => Some(PhysicalPosition::new(position.x + size.width as i32 / 2, position.y + size.height as i32 / 2)),
+			_ => None,
+		};
+		return Some((monitor, saved.map_or(Edge::Right, |dock| dock.edge), tab));
 	}
 	// Schowany panel stoi nad zasobnikiem, więc jego monitor to monitor ikony.
 	let monitor = main.current_monitor().ok().flatten().or_else(|| main.primary_monitor().ok().flatten())?;
-	Some((monitor, Edge::Right))
+	Some((monitor, Edge::Right, None))
 }
 
-// Dopasowuje okno do wysokości stosu dymków (piksele logiczne): przy górnej krawędzi stoi u góry, wszędzie indziej
-// na dole, przy lewej krawędzi po lewej, wszędzie indziej po prawej. Pusty stos chowa okno.
+// Dopasowuje okno do wysokości stosu dymków (piksele logiczne). W trybie krawędzi stos stoi tuż obok zakładki:
+// przy bocznej krawędzi najnowszy dymek na wysokości zakładki, starsze wyżej; przy górnej i dolnej wyśrodkowany
+// na zakładce. Poza nim w prawym dolnym rogu, nad zasobnikiem. Pusty stos chowa okno.
 fn place(app: &AppHandle, height: f64) {
 	let Some(window) = window(app) else {
 		return;
@@ -114,16 +120,32 @@ fn place(app: &AppHandle, height: f64) {
 		let _ = window.hide();
 		return;
 	}
-	let Some((monitor, edge)) = anchor(app) else {
+	let Some((monitor, edge, tab)) = anchor(app) else {
 		return;
 	};
 	let scale = monitor.scale_factor();
 	let area = monitor.work_area();
+	let (left, top) = (area.position.x, area.position.y);
+	let (right, bottom) = (left + area.size.width as i32, top + area.size.height as i32);
 	let margin = (MARGIN * scale).round() as i32;
 	let width = (WIDTH * scale).round() as i32;
 	let height = ((height * scale).round() as i32).min(area.size.height as i32 - 2 * margin);
-	let x = if edge == Edge::Left { area.position.x + margin } else { area.position.x + area.size.width as i32 - width - margin };
-	let y = if edge == Edge::Top { area.position.y + margin } else { area.position.y + area.size.height as i32 - height - margin };
+	let (x, y) = match tab {
+		Some(tab) => {
+			// Okno dymków ma własny odstęp 8 px (page/toast.html), więc stoi zaraz za paskiem.
+			let strip = (EDGE_STRIP * scale).round() as i32;
+			let half_tab = (EDGE_TAB_LENGTH * scale / 2.0).round() as i32;
+			let along_x = (tab.x - width / 2).clamp(left, right - width);
+			let along_y = (tab.y + half_tab - height).clamp(top, bottom - height);
+			match edge {
+				Edge::Right => (right - strip - width, along_y),
+				Edge::Left => (left + strip, along_y),
+				Edge::Top => (along_x, top + strip),
+				Edge::Bottom => (along_x, bottom - strip - height),
+			}
+		}
+		None => (right - width - margin, bottom - height - margin),
+	};
 	let _ = window.set_size(PhysicalSize::new(width as u32, height as u32));
 	let _ = window.set_position(PhysicalPosition::new(x, y));
 	if !window.is_visible().unwrap_or(false) {
@@ -143,7 +165,7 @@ pub fn show(app: &AppHandle, message: Message) {
 	if open {
 		return;
 	}
-	let Some((_, edge)) = anchor(app) else {
+	let Some((_, edge, _)) = anchor(app) else {
 		return;
 	};
 	let mut value = serde_json::to_value(message).unwrap();

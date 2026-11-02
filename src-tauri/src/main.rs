@@ -118,6 +118,8 @@ struct AppState {
 	edge_expanded: Mutex<bool>,
 	// Od kiedy kursor jest poza wysuniętym oknem; po EDGE_HIDE_DELAY okno się chowa.
 	edge_leave_at: Mutex<Option<Instant>>,
+	// Okno wysunięte kliknięciem w dymek (kursor jest wtedy obok okna): nie chowa się, dopóki kursor nie wjedzie na nie.
+	edge_hold: Mutex<bool>,
 	// Strona ma fokus w polu tekstowym; wtedy okno się nie chowa.
 	page_typing: Mutex<bool>,
 	// Numer ostatniej animacji; nowsza przerywa starszą.
@@ -446,6 +448,9 @@ fn set_edge_expanded(app: &AppHandle, window: &WebviewWindow, expanded: bool) {
 	let st = state(app);
 	*st.edge_expanded.lock().unwrap() = expanded;
 	*st.edge_leave_at.lock().unwrap() = None;
+	if !expanded {
+		*st.edge_hold.lock().unwrap() = false;
+	}
 	let saved = read_json::<EdgeDock>(app, "edge-dock.json");
 	if let (Some(monitor), Ok(size)) = (dock_monitor(window, saved.as_ref()), window.outer_size()) {
 		slide_to(app, edge_target(saved.as_ref(), &monitor, size, expanded));
@@ -564,7 +569,10 @@ fn edge_tick(app: &AppHandle) {
 	}
 	// Wciśnięty przycisk myszy poza oknem to zwykle przeciąganie (plik z Eksploratora, tekst, zdjęcie):
 	// okno czeka wysunięte, żeby było gdzie to upuścić.
-	if inside || mouse_button_down() {
+	if inside {
+		*st.edge_hold.lock().unwrap() = false;
+	}
+	if inside || mouse_button_down() || *st.edge_hold.lock().unwrap() {
 		*st.edge_leave_at.lock().unwrap() = None;
 		return;
 	}
@@ -709,6 +717,7 @@ fn notify_message(app: AppHandle, message: toast::Message) {
 // Klik w dymek: okno z tą rozmową. Bez powrotu do listy po długim schowaniu, bo strona i tak przechodzi do rozmowy.
 fn open_chat(app: &AppHandle, href: &str) {
 	state(app).hidden_at.lock().unwrap().take();
+	*state(app).edge_hold.lock().unwrap() = true;
 	show_window(app);
 	emit_to_page(app, "open-chat", href);
 }
@@ -1192,6 +1201,7 @@ fn main() {
 				drag_origin: Mutex::new(None),
 				edge_expanded: Mutex::new(false),
 				edge_leave_at: Mutex::new(None),
+				edge_hold: Mutex::new(false),
 				page_typing: Mutex::new(false),
 				slide_generation: AtomicU64::new(0),
 			});
