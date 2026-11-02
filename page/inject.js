@@ -474,11 +474,18 @@
 		// Dymki nowych wiadomości (src-tauri/src/toast.rs): nieprzeczytana rozmowa, której zmienił się podgląd ostatniej
 		// wiadomości. Wiersz to nazwa, podgląd, „ · ” i czas. Pierwszy przegląd listy (też po jej ponownym pojawieniu
 		// się) tylko zapamiętuje podglądy; nieznana rozmowa liczy się tylko na samej górze listy (ktoś napisał pierwszy raz).
+		// Po starcie Facebook pokazuje najpierw listę z pamięci, a potem ją synchronizuje i podmienia podglądy, więc przez
+		// QUIET po pojawieniu się listy tylko zapamiętujemy podglądy; inaczej każda zaległa rozmowa dałaby dymek.
+		const QUIET = 15 * 1000;
 		const previews = new Map();
 		let listShown = false;
+		let quietUntil = 0;
 		function checkMessages() {
 			const rows = [...document.querySelectorAll('[role="row"]')].filter(row => row.querySelector('a[href*="/t/"]'));
-			const fresh = !listShown;
+			if (!listShown && rows.length) {
+				quietUntil = Date.now() + QUIET;
+			}
+			const fresh = !listShown || Date.now() < quietUntil;
 			listShown = rows.length > 0;
 			rows.forEach((row, index) => {
 				const href = row.querySelector('a[href*="/t/"]').getAttribute('href');

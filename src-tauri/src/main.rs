@@ -35,8 +35,6 @@ const BACK_TO_LIST_AFTER: Duration = Duration::from_secs(10 * 60);
 const EDGE_STRIP: f64 = 16.0;
 // Długość zakładki wzdłuż krawędzi w pikselach logicznych (#messy-edge-strip w page/style.css).
 const EDGE_TAB_LENGTH: f64 = 150.0;
-// Tak długo kursor musi być poza oknem, zanim schowa się przy krawędzi.
-const EDGE_HIDE_DELAY: Duration = Duration::from_millis(600);
 
 // Przy nieprzeczytanych dymek w ikonie robi się czerwony (assets/icon-unread.svg).
 const ICON_NORMAL: &[u8] = include_bytes!("../../assets/IconTray@2x.png");
@@ -83,11 +81,42 @@ struct Settings {
 	hide_video_call: bool,
 	// Pliki ponad limit Messengera idą do Gofile bez pytania (page/inject.js, „Nie pytaj więcej”).
 	auto_upload: bool,
+	// Jak szybko okno przy krawędzi chowa się po zjechaniu kursora i jak długo widać dymki (src/toast.rs).
+	hide_speed: HideSpeed,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+enum HideSpeed {
+	Slow,
+	#[default]
+	Normal,
+	Fast,
+}
+
+impl HideSpeed {
+	// Tyle kursor musi być poza wysuniętym oknem przy krawędzi, zanim się schowa.
+	fn edge_delay(self) -> Duration {
+		Duration::from_millis(match self {
+			HideSpeed::Slow => 1500,
+			HideSpeed::Normal => 600,
+			HideSpeed::Fast => 250,
+		})
+	}
+
+	// Tyle milisekund dymek wisi na ekranie, zanim zacznie znikać.
+	fn toast_lifetime(self) -> u32 {
+		match self {
+			HideSpeed::Slow => 10_000,
+			HideSpeed::Normal => 5_000,
+			HideSpeed::Fast => 3_000,
+		}
+	}
 }
 
 impl Default for Settings {
 	fn default() -> Self {
-		Settings { muted: false, light: false, oled: false, pinned: false, translucent: true, window_mode: false, edge_mode: false, hide_video_call: false, auto_upload: false }
+		Settings { muted: false, light: false, oled: false, pinned: false, translucent: true, window_mode: false, edge_mode: false, hide_video_call: false, auto_upload: false, hide_speed: HideSpeed::Normal }
 	}
 }
 
@@ -116,7 +145,7 @@ struct AppState {
 	drag_origin: Mutex<Option<PhysicalPosition<i32>>>,
 	// Tryb krawędzi: okno jest wysunięte (true) albo schowane do paska (false).
 	edge_expanded: Mutex<bool>,
-	// Od kiedy kursor jest poza wysuniętym oknem; po EDGE_HIDE_DELAY okno się chowa.
+	// Od kiedy kursor jest poza wysuniętym oknem; po HideSpeed::edge_delay okno się chowa.
 	edge_leave_at: Mutex<Option<Instant>>,
 	// Okno wysunięte kliknięciem w dymek (kursor jest wtedy obok okna): nie chowa się, dopóki kursor nie wjedzie na nie.
 	edge_hold: Mutex<bool>,
@@ -253,6 +282,19 @@ fn set_mode_value(app: &AppHandle, mode: &str) {
 	build_tray_menu(app);
 	// show_window ustawia okno według trybu i je pokazuje (przy krawędzi wysunięte).
 	show_window(app);
+}
+
+// Menu ikony, „Chowanie okna i dymków”. Klik w zaznaczoną pozycję zostawia ją zaznaczoną (menu budujemy od nowa).
+fn set_hide_speed(app: &AppHandle, speed: HideSpeed) {
+	let state = state(app);
+	let settings = {
+		let mut settings = state.settings.lock().unwrap();
+		settings.hide_speed = speed;
+		*settings
+	};
+	write_json(app, "settings.json", &settings);
+	emit_to_page(app, "settings-changed", settings);
+	build_tray_menu(app);
 }
 
 #[tauri::command]
@@ -577,7 +619,7 @@ fn edge_tick(app: &AppHandle) {
 		return;
 	}
 	let left_at = *st.edge_leave_at.lock().unwrap().get_or_insert_with(Instant::now);
-	if left_at.elapsed() > EDGE_HIDE_DELAY && !*st.page_typing.lock().unwrap() {
+	if left_at.elapsed() > st.settings.lock().unwrap().hide_speed.edge_delay() && !*st.page_typing.lock().unwrap() {
 		set_edge_expanded(app, &window, false);
 	}
 }
@@ -773,6 +815,11 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		&CheckMenuItem::with_id(app, "mode_edge", page.mode_edge, true, mode == "edge", None::<&str>)?,
 		&PredefinedMenuItem::separator(app)?,
 		&CheckMenuItem::with_id(app, "translucent", strings.translucent, mode == "free", settings.translucent, None::<&str>)?,
+		&Submenu::with_items(app, strings.hide_speed_menu, true, &[
+			&CheckMenuItem::with_id(app, "hide_slow", strings.hide_slow, true, settings.hide_speed == HideSpeed::Slow, None::<&str>)?,
+			&CheckMenuItem::with_id(app, "hide_normal", strings.hide_normal, true, settings.hide_speed == HideSpeed::Normal, None::<&str>)?,
+			&CheckMenuItem::with_id(app, "hide_fast", strings.hide_fast, true, settings.hide_speed == HideSpeed::Fast, None::<&str>)?,
+		])?,
 	])?;
 	// Podmenu „Wygląd”: kolory i przyciski na stronie.
 	let look_menu = Submenu::with_items(app, strings.look_menu, true, &[
@@ -817,6 +864,9 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 		id if id.starts_with("mode_") => set_mode_value(app, &id["mode_".len()..]),
 		"hide_video_call" => set_setting_value(app, "hide_video_call", !settings.hide_video_call),
 		"auto_upload" => set_setting_value(app, "auto_upload", !settings.auto_upload),
+		"hide_slow" => set_hide_speed(app, HideSpeed::Slow),
+		"hide_normal" => set_hide_speed(app, HideSpeed::Normal),
+		"hide_fast" => set_hide_speed(app, HideSpeed::Fast),
 		"autostart" => {
 			let autolaunch = app.autolaunch();
 			let _ = if autolaunch.is_enabled().unwrap_or(false) { autolaunch.disable() } else { autolaunch.enable() };

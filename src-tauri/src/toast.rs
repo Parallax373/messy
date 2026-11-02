@@ -171,6 +171,7 @@ pub fn show(app: &AppHandle, message: Message) {
 	let mut value = serde_json::to_value(message).unwrap();
 	value["from"] = serde_json::to_value(edge).unwrap();
 	value["light"] = settings.light.into();
+	value["lifetime"] = settings.hide_speed.toast_lifetime().into();
 	run(app, format!("window.__toast.add({value})"));
 }
 

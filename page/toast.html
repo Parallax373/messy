@@ -35,7 +35,6 @@ body[data-from="bottom"] .toast { animation-name: in-bottom; }
 <div id="stack"></div>
 <script>
 (() => {
-	const LIFETIME = 5000;
 	const FADE = 400;
 	const stack = document.getElementById('stack');
 	let hovered = false;
@@ -75,8 +74,8 @@ body[data-from="bottom"] .toast { animation-name: in-bottom; }
 	}, 200);
 
 	window.__toast = {
-		// from: krawędź, z której wjeżdżają dymki ('left' | 'right' | 'top' | 'bottom').
-		add({href, name, text, avatar, from, light}) {
+		// lifetime: ile ms dymek wisi (ustawienie „Chowanie”). from: krawędź, z której wjeżdżają dymki ('left' | 'right' | 'top' | 'bottom').
+		add({href, name, text, avatar, from, light, lifetime}) {
 			document.body.dataset.from = from;
 			document.body.classList.toggle('light', light);
 			const toast = document.createElement('div');
@@ -87,7 +86,7 @@ body[data-from="bottom"] .toast { animation-name: in-bottom; }
 			}
 			toast.querySelector('b').textContent = name;
 			toast.querySelector('span').textContent = text;
-			toast.deadline = Date.now() + LIFETIME;
+			toast.deadline = Date.now() + lifetime;
 			toast.addEventListener('click', () => {
 				send({open: href});
 				toast.remove();
