@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod i18n;
+mod toast;
 mod updater;
 mod upload;
 
@@ -451,6 +452,9 @@ fn set_edge_expanded(app: &AppHandle, window: &WebviewWindow, expanded: bool) {
 	}
 	// Strona przenika się z zakładką w trakcie ruchu (page/style.css), więc dostaje stan od razu.
 	emit_edge_state(app);
+	if expanded {
+		toast::clear(app);
+	}
 }
 
 // Czy po drugiej stronie danej krawędzi monitora stoi inny monitor (okno wjeżdżałoby na jego ekran).
@@ -696,6 +700,19 @@ fn set_unread(app: AppHandle, count: u32) {
 	update_tooltip(&app);
 }
 
+// Nowa wiadomość na liście czatów (page/inject.js); dymek, jeśli okna nie widać (src/toast.rs).
+#[tauri::command]
+fn notify_message(app: AppHandle, message: toast::Message) {
+	toast::show(&app, message);
+}
+
+// Klik w dymek: okno z tą rozmową. Bez powrotu do listy po długim schowaniu, bo strona i tak przechodzi do rozmowy.
+fn open_chat(app: &AppHandle, href: &str) {
+	state(app).hidden_at.lock().unwrap().take();
+	show_window(app);
+	emit_to_page(app, "open-chat", href);
+}
+
 fn update_tooltip(app: &AppHandle) {
 	let Some(tray) = app.tray_by_id(TRAY_ID) else {
 		return;
@@ -898,6 +915,7 @@ fn show_window(app: &AppHandle) {
 	let _ = window.show();
 	let _ = window.unminimize();
 	let _ = window.set_focus();
+	toast::clear(app);
 }
 
 fn hide_main_window(app: &AppHandle, window: &Window) {
@@ -1157,7 +1175,7 @@ fn main() {
 		.plugin(tauri_plugin_notification::init())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_updater::Builder::new().build())
-		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window, set_typing, upload::upload_chunk, upload::upload_file, upload::upload_cancel, set_mode])
+		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window, set_typing, upload::upload_chunk, upload::upload_file, upload::upload_cancel, set_mode, notify_message])
 		.on_window_event(on_window_event)
 		.setup(|app| {
 			let handle = app.handle();
@@ -1187,6 +1205,7 @@ fn main() {
 			}
 
 			let window = create_window(handle)?;
+			toast::create(handle)?;
 			// Tryb krawędzi: od startu (też z Windowsem) zakładka czeka przy krawędzi, schowana i bez fokusu.
 			if state(handle).settings.lock().unwrap().edge_mode {
 				restore_window(handle, &window);

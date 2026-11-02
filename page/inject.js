@@ -62,11 +62,12 @@
 	let strings = null;
 
 	// Facebook może pamiętać zgodę na powiadomienia sprzed wyciszenia, więc podczas wyciszenia
-	// zamiast systemowego dymka zwracamy atrapę z tym samym interfejsem.
+	// zamiast systemowego dymka zwracamy atrapę z tym samym interfejsem. Poza trybem okna systemowy dymek
+	// zastępują dymki Messy (src-tauri/src/toast.rs).
 	const NativeNotification = window.Notification;
 	window.Notification = new Proxy(NativeNotification, {
 		construct(target, args) {
-			if (!settings.muted) {
+			if (!settings.muted && settings.window_mode) {
 				return new target(...args);
 			}
 
@@ -75,6 +76,38 @@
 			return silent;
 		},
 	});
+
+	// Messenger wysyła powiadomienie na telefon, gdy uzna, że nie ma cię przy komputerze, m.in. gdy strona jest
+	// niewidoczna, a schowany Messy jest niewidoczny prawie zawsze. Przez ACTIVE_FOR od ostatniego użycia okna
+	// strona mówi więc Facebookowi, że jest widoczna; potem wraca prawdziwy stan.
+	const ACTIVE_FOR = 15 * 60 * 1000;
+	let lastUsed = 0;
+	for (const name of ['focus', 'pointerdown', 'pointermove', 'keydown']) {
+		window.addEventListener(name, () => lastUsed = Date.now(), true);
+	}
+	const realHidden = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden').get;
+	const pretendVisible = () => realHidden.call(document) && Date.now() - lastUsed < ACTIVE_FOR;
+	Object.defineProperty(Document.prototype, 'hidden', {configurable: true, get() {
+		return pretendVisible() ? false : realHidden.call(this);
+	}});
+	const realVisibility = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState').get;
+	Object.defineProperty(Document.prototype, 'visibilityState', {configurable: true, get() {
+		return pretendVisible() ? 'visible' : realVisibility.call(this);
+	}});
+	// Schowanie okna: Facebook nie dostaje zdarzenia, dopóki udajemy widoczność; po ACTIVE_FOR dostaje je z opóźnieniem.
+	let pretending = false;
+	window.addEventListener('visibilitychange', event => {
+		if (pretendVisible()) {
+			pretending = true;
+			event.stopImmediatePropagation();
+		}
+	}, true);
+	setInterval(() => {
+		if (pretending && !pretendVisible()) {
+			pretending = false;
+			document.dispatchEvent(new Event('visibilitychange'));
+		}
+	}, 30 * 1000);
 
 	const style = document.createElement('style');
 	style.textContent = __MESSY_CSS__;
@@ -437,6 +470,47 @@
 
 		setInterval(reportUnread, 2000);
 		reportUnread();
+
+		// Dymki nowych wiadomości (src-tauri/src/toast.rs): nieprzeczytana rozmowa, której zmienił się podgląd ostatniej
+		// wiadomości. Wiersz to nazwa, podgląd, „ · ” i czas. Pierwszy przegląd listy (też po jej ponownym pojawieniu
+		// się) tylko zapamiętuje podglądy; nieznana rozmowa liczy się tylko na samej górze listy (ktoś napisał pierwszy raz).
+		const previews = new Map();
+		let listShown = false;
+		function checkMessages() {
+			const rows = [...document.querySelectorAll('[role="row"]')].filter(row => row.querySelector('a[href*="/t/"]'));
+			const fresh = !listShown;
+			listShown = rows.length > 0;
+			rows.forEach((row, index) => {
+				const href = row.querySelector('a[href*="/t/"]').getAttribute('href');
+				const spans = [...row.querySelectorAll('span')].filter(span => !span.children.length && span.textContent.trim());
+				const [name, text] = spans.map(span => span.textContent.trim());
+				const known = previews.has(href);
+				const changed = known ? previews.get(href) !== text : index === 0 && previews.size > 0;
+				previews.set(href, text);
+				const unread = spans.some(span => Number(getComputedStyle(span).fontWeight) >= 600);
+				if (!fresh && changed && unread && name && text) {
+					window.messy.notifyMessage({href, name, text, avatar: row.querySelector('img')?.src ?? ''});
+				}
+			});
+		}
+		// Obserwator, nie odpytywanie: w schowanym oknie przeglądarka spowalnia powtarzane timery nawet do minuty.
+		let messageCheck = 0;
+		new MutationObserver(() => {
+			messageCheck ||= setTimeout(() => {
+				messageCheck = 0;
+				checkMessages();
+			}, 300);
+		}).observe(document.body, {childList: true, subtree: true, characterData: true});
+		checkMessages();
+
+		window.messy.onOpenChat(href => {
+			const link = document.querySelector(`a[href="${CSS.escape(href)}"]`);
+			if (link) {
+				link.click();
+			} else {
+				location.assign(href);
+			}
+		});
 
 		// Tryb krawędzi: wąski pasek po stronie zwróconej do środka ekranu, widoczny gdy okno jest schowane.
 		// Pokazuje liczbę nieprzeczytanych i miga, gdy przybywa nowych.

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!-- Dymki nowych wiadomości (src-tauri/src/toast.rs). Okno nie ma mostu Tauri: do Messy pisze przez tytuł dokumentu
+     (on_document_title_changed), Messy do niego przez eval (window.__toast). -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+html, body { margin: 0; background: transparent; overflow: hidden; font: 13px/1.35 'Segoe UI', system-ui, sans-serif; user-select: none; }
+#stack { display: flex; flex-direction: column; gap: 8px; padding: 8px; }
+/* Nowy dymek staje przy krawędzi ekranu i wypycha starsze: na dole w górę, przy górnej krawędzi w dół. */
+body[data-from="top"] #stack { flex-direction: column-reverse; }
+.toast {
+	display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; cursor: pointer;
+	background: #242526; color: #e4e6eb; border: 1px solid rgba(128, 128, 128, .25); box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+	animation: in-right .28s cubic-bezier(.2, .9, .3, 1); transition: opacity .4s;
+}
+body.light .toast { background: #fff; color: #050505; }
+.toast:hover { filter: brightness(1.12); }
+body.light .toast:hover { filter: brightness(.96); }
+.toast.out { opacity: 0; }
+body[data-from="left"] .toast { animation-name: in-left; }
+body[data-from="top"] .toast { animation-name: in-top; }
+body[data-from="bottom"] .toast { animation-name: in-bottom; }
+@keyframes in-right { from { transform: translateX(110%); } }
+@keyframes in-left { from { transform: translateX(-110%); } }
+@keyframes in-top { from { transform: translateY(-110%); } }
+@keyframes in-bottom { from { transform: translateY(110%); } }
+.toast img { flex: none; width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: rgba(128, 128, 128, .3); }
+.toast div { min-width: 0; }
+.toast b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toast span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; opacity: .8; }
+</style>
+</head>
+<body>
+<div id="stack"></div>
+<script>
+(() => {
+	const LIFETIME = 5000;
+	const FADE = 400;
+	const stack = document.getElementById('stack');
+	let hovered = false;
+	let seq = 0;
+
+	const send = message => {
+		document.title = JSON.stringify({...message, seq: ++seq});
+	};
+	// Messy dopasowuje okno do wysokości stosu; pusty stos chowa okno.
+	const report = () => send({height: stack.children.length ? Math.ceil(stack.getBoundingClientRect().height) : 0});
+
+	function remove(toast) {
+		if (toast.classList.contains('out')) {
+			return;
+		}
+		toast.classList.add('out');
+		setTimeout(() => {
+			toast.remove();
+			report();
+		}, FADE);
+	}
+
+	// Kursor nad oknem zatrzymuje znikanie; po zjechaniu dymki zostają jeszcze chwilę.
+	document.addEventListener('mouseenter', () => hovered = true);
+	document.addEventListener('mouseleave', () => {
+		hovered = false;
+		for (const toast of stack.children) {
+			toast.deadline = Math.max(toast.deadline, Date.now() + 2000);
+		}
+	});
+	setInterval(() => {
+		for (const toast of [...stack.children]) {
+			if (!hovered && Date.now() > toast.deadline) {
+				remove(toast);
+			}
+		}
+	}, 200);
+
+	window.__toast = {
+		// from: krawędź, z której wjeżdżają dymki ('left' | 'right' | 'top' | 'bottom').
+		add({href, name, text, avatar, from, light}) {
+			document.body.dataset.from = from;
+			document.body.classList.toggle('light', light);
+			const toast = document.createElement('div');
+			toast.className = 'toast';
+			toast.innerHTML = '<img alt=""><div><b></b><span></span></div>';
+			if (avatar) {
+				toast.querySelector('img').src = avatar;
+			}
+			toast.querySelector('b').textContent = name;
+			toast.querySelector('span').textContent = text;
+			toast.deadline = Date.now() + LIFETIME;
+			toast.addEventListener('click', () => {
+				send({open: href});
+				toast.remove();
+				report();
+			});
+			stack.append(toast);
+			report();
+		},
+		clear() {
+			stack.replaceChildren();
+			report();
+		},
+	};
+	send({ready: true});
+})();
+</script>
+</body>
+</html>

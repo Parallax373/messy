@@ -18,6 +18,7 @@
 		"allow-upload-chunk",
 		"allow-upload-file",
 		"allow-upload-cancel",
-		"allow-set-mode"
+		"allow-set-mode",
+		"allow-notify-message"
 	]
 }
