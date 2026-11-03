@@ -178,4 +178,6 @@ html.messy-edge-collapsed body > *:not(#messy-edge-strip) { opacity: 0 !importan
 .messy-edge-badge[hidden] { display: none; }
 #messy-edge-strip.blink .messy-edge-badge { animation: messy-edge-blink .6s ease-in-out 3; }
 @keyframes messy-edge-blink { 50% { transform: scale(1.35); box-shadow: 0 0 8px #E0102F; } }
+/* Tryb OLED: zakładka czarna jak reszta, z obwódką, żeby nie zginęła na ciemnej tapecie. */
+html.messy-oled #messy-edge-strip { background: #000; box-shadow: inset 0 0 0 1px #2a2d33; }
 @media (prefers-reduced-motion: reduce) { #messy-edge-strip.blink .messy-edge-badge { animation: none; } }

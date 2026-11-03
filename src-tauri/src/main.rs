@@ -550,8 +550,19 @@ fn edge_tick(app: &AppHandle) {
 		return;
 	};
 	let (left, top) = (f64::from(position.x), f64::from(position.y));
-	let inside = cursor.x >= left && cursor.x < left + f64::from(size.width) && cursor.y >= top && cursor.y < top + f64::from(size.height);
+	let (right, bottom) = (left + f64::from(size.width), top + f64::from(size.height));
+	let inside = cursor.x >= left && cursor.x < right && cursor.y >= top && cursor.y < bottom;
 	let expanded = *st.edge_expanded.lock().unwrap();
+	// Odstęp MARGIN między wysuniętym oknem a krawędzią ekranu też liczy się jako okno. Inaczej kursor wciśnięty
+	// w krawędź wysuwa okno (trafia w zakładkę), a po wysunięciu jest w odstępie, więc okno chowa się i tak w kółko.
+	let gap = (MARGIN * window.scale_factor().unwrap_or(1.0)).ceil() + 1.0;
+	let in_gap = match read_json::<EdgeDock>(app, "edge-dock.json").map_or(Edge::Right, |dock| dock.edge) {
+		Edge::Right => cursor.x >= right && cursor.x < right + gap && cursor.y >= top && cursor.y < bottom,
+		Edge::Left => cursor.x < left && cursor.x >= left - gap && cursor.y >= top && cursor.y < bottom,
+		Edge::Bottom => cursor.y >= bottom && cursor.y < bottom + gap && cursor.x >= left && cursor.x < right,
+		Edge::Top => cursor.y < top && cursor.y >= top - gap && cursor.x >= left && cursor.x < right,
+	};
+	let inside = inside || (expanded && in_gap);
 	if !expanded {
 		if inside && over_edge_tab(app, &window, cursor, position, size) {
 			set_edge_expanded(app, &window, true);
