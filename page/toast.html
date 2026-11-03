@@ -15,6 +15,9 @@ body[data-from="top"] #stack { flex-direction: column-reverse; }
 	animation: in-right .28s cubic-bezier(.2, .9, .3, 1); transition: opacity .4s;
 }
 body.light .toast { background: #fff; color: #050505; }
+/* Tryb OLED: czarne dymki jak reszta Messy. */
+body.oled .toast { background: #000; border-color: rgba(128, 128, 128, .35); }
+body.oled .toast:hover { background: #141414; filter: none; }
 .toast:hover { filter: brightness(1.12); }
 body.light .toast:hover { filter: brightness(.96); }
 .toast.out { opacity: 0; }
@@ -75,9 +78,10 @@ body[data-from="bottom"] .toast { animation-name: in-bottom; }
 
 	window.__toast = {
 		// lifetime: ile ms dymek wisi (ustawienie „Chowanie”). from: krawędź, z której wjeżdżają dymki ('left' | 'right' | 'top' | 'bottom').
-		add({href, name, text, avatar, from, light, lifetime}) {
+		add({href, name, text, avatar, from, light, oled, lifetime}) {
 			document.body.dataset.from = from;
 			document.body.classList.toggle('light', light);
+			document.body.classList.toggle('oled', Boolean(oled));
 			const toast = document.createElement('div');
 			toast.className = 'toast';
 			toast.innerHTML = '<img alt=""><div><b></b><span></span></div>';
