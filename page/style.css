@@ -173,7 +173,8 @@ html.messy-edge-collapsed body > *:not(#messy-edge-strip) { opacity: 0 !importan
 #messy-edge-strip[data-edge="top"] { bottom: 0; border-radius: 0 0 8px 8px; }
 .messy-edge-grip { width: 3px; height: 26px; border-radius: 2px; background: #4a505c; }
 #messy-edge-strip[data-edge="top"] .messy-edge-grip, #messy-edge-strip[data-edge="bottom"] .messy-edge-grip { width: 26px; height: 3px; }
-.messy-edge-badge { min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: #E0102F; color: #fff;
+/* border-box: bez tego padding dochodzi do min-width i plakietka (20 px) wystaje poza 16-pikselowy pasek. */
+.messy-edge-badge { box-sizing: border-box; min-width: 14px; max-width: 16px; height: 14px; padding: 0 2px; border-radius: 7px; background: #E0102F; color: #fff;
 	font: 700 10px/14px system-ui, sans-serif; text-align: center; }
 .messy-edge-badge[hidden] { display: none; }
 #messy-edge-strip.blink .messy-edge-badge { animation: messy-edge-blink .6s ease-in-out 3; }
