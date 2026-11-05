@@ -15,10 +15,10 @@ const WIDTH: f64 = 360.0;
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Message {
 	// Adres rozmowy na liście czatów (/messages/t/…); klik w dymek ją otwiera.
-	href: String,
-	name: String,
-	text: String,
-	avatar: String,
+	pub href: String,
+	pub name: String,
+	pub text: String,
+	pub avatar: String,
 }
 
 // Wywołania window.__toast czekające, aż okno dymków się wczyta.

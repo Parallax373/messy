@@ -6,7 +6,7 @@
 	}
 
 	const invoke = (command, args) => window.__TAURI_INTERNALS__.invoke(command, args);
-	const listeners = {'settings-changed': [], 'update-ready': [], 'back-to-list': [], 'edge-state': [], 'upload-progress': [], 'open-chat': []};
+	const listeners = {'settings-changed': [], 'update-ready': [], 'back-to-list': [], 'edge-state': [], 'upload-progress': [], 'open-chat': [], 'toast-action': []};
 
 	// Messy wywołuje to przez eval, gdy zmieni się ustawienie albo stan aktualizacji.
 	window.__messyEmit = (name, value) => {
@@ -47,6 +47,8 @@
 		notifyMessage: message => void invoke('notify_message', {message}),
 		// Klik w dymek: href rozmowy do otwarcia.
 		onOpenChat: callback => listeners['open-chat'].push(callback),
+		// Przycisk w powiadomieniu Windows (src-tauri/src/native_toast.rs): {action: 'reply' | 'react', href, text}.
+		onToastAction: callback => listeners['toast-action'].push(callback),
 		// Plik ponad limit Messengera idzie do Gofile (src-tauri/src/upload.rs); zwraca link do pobrania.
 		// Plik idzie do Messy kawałkami po 2 MB w base64, potem jedno polecenie go wysyła.
 		uploadFile: async file => {

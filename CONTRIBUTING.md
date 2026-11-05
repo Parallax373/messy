@@ -28,6 +28,8 @@ Force the English UI: `$env:MESSY_LANG="en"; npm start`.
 - `src-tauri/src/i18n.rs`: Polish and English UI strings
 - `src-tauri/src/updater.rs`: checking, downloading and installing updates from GitHub
 - `src-tauri/src/toast.rs`: new-message toasts next to the tray or the edge tab while the window is hidden
+- `src-tauri/src/native_toast.rs`: the other choice in the tray menu: real Windows notifications for new messages
+  (reply box and quick reaction, done by `page/inject.js`); avatars are cached in `%TEMP%\messy-avatars`
 - `src-tauri/capabilities/messenger.json`: which commands facebook.com may call
 - `page/bridge.js`: `window.messy` in the page, on top of Tauri IPC
 - `page/inject.js`: script running in the page, buttons in the Chats header, unread count, new messages for toasts,

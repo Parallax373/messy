@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod i18n;
+mod native_toast;
 mod toast;
 mod updater;
 mod upload;
@@ -81,6 +82,8 @@ struct Settings {
 	hide_video_call: bool,
 	// Dymki Messy (src/toast.rs); wyłączone: zwykłe powiadomienia Windowsa jak w trybie okna.
 	toasts: bool,
+	// Powiadomienia Windows wysyłane przez Messy (src/native_toast.rs) zamiast tych od Facebooka; wyklucza toasts.
+	windows_toasts: bool,
 	// Pliki ponad limit Messengera idą do Gofile bez pytania (page/inject.js, „Nie pytaj więcej”).
 	auto_upload: bool,
 	// Jak szybko okno przy krawędzi chowa się po zjechaniu kursora i jak długo widać dymki (src/toast.rs).
@@ -118,7 +121,7 @@ impl HideSpeed {
 
 impl Default for Settings {
 	fn default() -> Self {
-		Settings { muted: false, light: false, oled: false, pinned: false, translucent: true, window_mode: false, edge_mode: false, hide_video_call: false, toasts: true, auto_upload: false, hide_speed: HideSpeed::Normal }
+		Settings { muted: false, light: false, oled: false, pinned: false, translucent: true, window_mode: false, edge_mode: false, hide_video_call: false, toasts: true, windows_toasts: false, auto_upload: false, hide_speed: HideSpeed::Normal }
 	}
 }
 
@@ -232,7 +235,18 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 				}
 			}
 			"hide_video_call" => settings.hide_video_call = value,
-			"toasts" => settings.toasts = value,
+			"toasts" => {
+				settings.toasts = value;
+				if value {
+					settings.windows_toasts = false;
+				}
+			}
+			"windows_toasts" => {
+				settings.windows_toasts = value;
+				if value {
+					settings.toasts = false;
+				}
+			}
 			"auto_upload" => settings.auto_upload = value,
 			_ => return,
 		}
@@ -788,7 +802,11 @@ fn set_unread(app: AppHandle, count: u32) {
 // Nowa wiadomość na liście czatów (page/inject.js); dymek, jeśli okna nie widać (src/toast.rs).
 #[tauri::command]
 fn notify_message(app: AppHandle, message: toast::Message) {
-	toast::show(&app, message);
+	if state(&app).settings.lock().unwrap().windows_toasts {
+		native_toast::show(&app, message);
+	} else {
+		toast::show(&app, message);
+	}
 }
 
 // Klik w dymek: okno z tą rozmową. Bez powrotu do listy po długim schowaniu, bo strona i tak przechodzi do rozmowy.
@@ -874,6 +892,7 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		Box::new(Submenu::with_items(app, strings.notifications_menu, true, &[
 			&CheckMenuItem::with_id(app, "muted", strings.mute, true, settings.muted, None::<&str>)?,
 			&CheckMenuItem::with_id(app, "toasts", strings.toasts, !settings.muted, settings.toasts, None::<&str>)?,
+			&CheckMenuItem::with_id(app, "windows_toasts", strings.windows_toasts, !settings.muted, settings.windows_toasts, None::<&str>)?,
 		])?),
 		Box::new(Submenu::with_items(app, strings.general_menu, true, &[
 			&CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?,
@@ -906,6 +925,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 		"hide_video_call" => set_setting_value(app, "hide_video_call", !settings.hide_video_call),
 		"auto_upload" => set_setting_value(app, "auto_upload", !settings.auto_upload),
 		"toasts" => set_setting_value(app, "toasts", !settings.toasts),
+		"windows_toasts" => set_setting_value(app, "windows_toasts", !settings.windows_toasts),
 		"hide_slow" => set_hide_speed(app, HideSpeed::Slow),
 		"hide_normal" => set_hide_speed(app, HideSpeed::Normal),
 		"hide_fast" => set_hide_speed(app, HideSpeed::Fast),
@@ -1290,6 +1310,7 @@ fn main() {
 			let handle = app.handle();
 			upload::cleanup();
 			let first_run = !config_file(handle, "settings.json").exists();
+			app.manage(native_toast::NativeToasts::default());
 			app.manage(AppState {
 				settings: Mutex::new(read_json(handle, "settings.json").unwrap_or_default()),
 				unread: Mutex::new(0),

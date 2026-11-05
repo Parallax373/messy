@@ -67,7 +67,8 @@
 	const NativeNotification = window.Notification;
 	window.Notification = new Proxy(NativeNotification, {
 		construct(target, args) {
-			if (!settings.muted && (settings.window_mode || !settings.toasts)) {
+			// Powiadomienia Windows wysyła wtedy samo Messy (src-tauri/src/native_toast.rs), więc te od Facebooka by się dublowały.
+			if (!settings.muted && !settings.windows_toasts && (settings.window_mode || !settings.toasts)) {
 				return new target(...args);
 			}
 
@@ -76,6 +77,16 @@
 			return silent;
 		},
 	});
+
+	// Dźwięk nowej wiadomości Facebook gra z własnych zasobów (/rsrc.php/…), poza drzewem strony. Przy powiadomieniach
+	// Windows gra dźwięk Windowsa, więc ten pomijamy. Wiadomości głosowe i filmy idą z innych adresów, ich to nie dotyczy.
+	const play = HTMLMediaElement.prototype.play;
+	HTMLMediaElement.prototype.play = function () {
+		if (settings.windows_toasts && !this.isConnected && /\/rsrc\.php\//.test(this.currentSrc || this.src)) {
+			return Promise.resolve();
+		}
+		return play.call(this);
+	};
 
 	// Messenger wysyła powiadomienie na telefon, gdy uzna, że nie ma cię przy komputerze, m.in. gdy strona jest
 	// niewidoczna, a schowany Messy jest niewidoczny prawie zawsze. Przez ACTIVE_FOR od ostatniego użycia okna
@@ -551,6 +562,68 @@
 			} else {
 				location.assign(href);
 			}
+		});
+
+		// Odpowiedź albo szybka reakcja z powiadomienia Windows (src-tauri/src/native_toast.rs), bez pokazywania okna:
+		// strona przechodzi do rozmowy, czeka na pole wiadomości i wysyła. Pole to edytor Lexical (role=textbox),
+		// a ostatni przycisk w jego pasku to szybka reakcja czatu (pusty tekst) albo „Wyślij” (z tekstem).
+		const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+		const composerFor = href => {
+			// Adres z listy kończy się „/”, adres otwartej rozmowy nie, więc porównujemy sam identyfikator.
+			const id = href.split('/t/')[1]?.split(/[/?]/)[0];
+			if (!id || location.pathname.split('/t/')[1]?.split('/')[0] !== id) {
+				return null;
+			}
+			return document.querySelector('[role="main"] [contenteditable="true"][role="textbox"]');
+		};
+		function composerButtons(editor) {
+			for (let node = editor.parentElement; node && node !== document.body; node = node.parentElement) {
+				const buttons = [...node.querySelectorAll('[role="button"]')].filter(button => !editor.contains(button));
+				if (buttons.length >= 3) {
+					return buttons;
+				}
+			}
+			return [];
+		}
+		let toastQueue = Promise.resolve();
+		window.messy.onToastAction(({action, href, text}) => {
+			toastQueue = toastQueue.then(async () => {
+				if (!composerFor(href)) {
+					const link = document.querySelector(`a[href="${CSS.escape(href)}"]`);
+					if (link) {
+						link.click();
+					} else {
+						history.pushState(null, '', href);
+						dispatchEvent(new PopStateEvent('popstate'));
+					}
+				}
+				let editor = null;
+				for (let i = 0; i < 50 && !(editor = composerFor(href)); i++) {
+					await wait(100);
+				}
+				if (!editor) {
+					return;
+				}
+				// Chwila na podpięcie edytora po zmianie rozmowy.
+				await wait(300);
+				if (action === 'react') {
+					composerButtons(editor).at(-1)?.click();
+					return;
+				}
+				// Wklejenie zamiast execCommand('insertText'): to drugie nic nie robi, gdy okno jest schowane (bez fokusu).
+				editor.focus();
+				const data = new DataTransfer();
+				data.setData('text/plain', text);
+				editor.dispatchEvent(new ClipboardEvent('paste', {clipboardData: data, bubbles: true, cancelable: true}));
+				await wait(150);
+				editor.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true}));
+				await wait(300);
+				// Gdyby Enter nie zadziałał, przycisk „Wyślij” na końcu paska.
+				if (editor.textContent.trim()) {
+					composerButtons(editor).at(-1)?.click();
+				}
+				editor.blur();
+			}).catch(() => {});
 		});
 
 		// Tryb krawędzi: wąski pasek po stronie zwróconej do środka ekranu, widoczny gdy okno jest schowane.
