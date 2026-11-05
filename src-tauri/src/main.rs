@@ -7,7 +7,7 @@ mod upload;
 
 use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -121,6 +121,9 @@ struct AppState {
 	page_typing: Mutex<bool>,
 	// Numer ostatniej animacji; nowsza przerywa starszą.
 	slide_generation: AtomicU64,
+	// Start w trybie krawędzi: okno czeka ze pokazaniem, aż strona dostanie stan paska (get_settings),
+	// inaczej przez chwilę widać pełną stronę zamiast samej zakładki.
+	show_when_page_ready: AtomicBool,
 }
 
 // Krawędź ekranu, przy której stoi okno w trybie krawędzi.
@@ -639,7 +642,16 @@ fn set_typing(app: AppHandle, on: bool) {
 fn get_settings(app: AppHandle) -> Settings {
 	// Strona pyta o ustawienia po każdym załadowaniu; przy okazji dostaje stan paska krawędzi.
 	emit_edge_state(&app);
+	show_if_waiting(&app);
 	*state(&app).settings.lock().unwrap()
+}
+
+fn show_if_waiting(app: &AppHandle) {
+	if state(app).show_when_page_ready.swap(false, Ordering::Relaxed) {
+		if let Some(window) = main_window(app) {
+			show_inactive(&window);
+		}
+	}
 }
 
 #[tauri::command]
@@ -912,6 +924,14 @@ fn show_window(app: &AppHandle) {
 	let _ = window.show();
 	let _ = window.unminimize();
 	let _ = window.set_focus();
+}
+
+// Pokazuje okno bez aktywacji: przy starcie (też z Windowsem) Messy nie zabiera fokusu temu, w czym się pracuje.
+fn show_inactive(window: &WebviewWindow) {
+	// Przez Tauri, nie ShowWindow wprost: inaczej Tauri nie wie, że okno jest widoczne, i przezroczystość się psuje.
+	let _ = window.set_focusable(false);
+	let _ = window.show();
+	let _ = window.set_focusable(true);
 }
 
 fn hide_main_window(app: &AppHandle, window: &Window) {
@@ -1190,6 +1210,7 @@ fn main() {
 				edge_leave_at: Mutex::new(None),
 				page_typing: Mutex::new(false),
 				slide_generation: AtomicU64::new(0),
+				show_when_page_ready: AtomicBool::new(false),
 			});
 			start_edge_hover(handle.clone());
 
@@ -1202,16 +1223,25 @@ fn main() {
 
 			let window = create_window(handle)?;
 			// Tryb krawędzi: od startu (też z Windowsem) zakładka czeka przy krawędzi, schowana i bez fokusu.
-			if state(handle).settings.lock().unwrap().edge_mode {
+			let edge_mode = state(handle).settings.lock().unwrap().edge_mode;
+			if edge_mode {
 				restore_window(handle, &window);
-				let _ = window.show();
+				state(handle).show_when_page_ready.store(true, Ordering::Relaxed);
+				// Zapas, gdyby strona się nie zgłosiła (brak sieci, inna strona niż czaty).
+				let app = handle.clone();
+				std::thread::spawn(move || {
+					std::thread::sleep(Duration::from_secs(10));
+					let _ = app.clone().run_on_main_thread(move || show_if_waiting(&app));
+				});
 			}
 			create_tray(handle)?;
 			updater::setup(handle);
 			build_tray_menu(handle);
 			// Wersja deweloperska od razu pokazuje okno, żeby nie szukać ikony w zasobniku po każdej przebudowie.
-			if cfg!(debug_assertions) {
-				show_window(handle);
+			// Też bez fokusu; w trybie krawędzi zostaje schowane jak w wydaniu.
+			if cfg!(debug_assertions) && !edge_mode {
+				restore_window(handle, &window);
+				show_inactive(&window);
 			}
 
 			// Wpis w rejestrze powstaje dopiero, gdy Windows zobaczy ikonę, więc przy pierwszym uruchomieniu ponawiamy.
