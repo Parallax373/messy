@@ -460,7 +460,8 @@
 			strip.dataset.edge = edgeState.edge;
 			strip.classList.toggle('messy-edge-shown', !edgeState.expanded);
 			const badge = strip.querySelector('.messy-edge-badge');
-			badge.textContent = lastUnread > 99 ? '99+' : String(lastUnread);
+			// Pasek ma 16 px: dłuższe liczby by z niego wystawały.
+			badge.textContent = lastUnread > 9 ? '9+' : String(lastUnread);
 			badge.hidden = lastUnread === 0;
 		}
 		window.messy.onEdgeState(value => {
