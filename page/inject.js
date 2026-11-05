@@ -502,6 +502,12 @@
 		const previews = new Map();
 		let listShown = false;
 		let quietUntil = 0;
+		const readText = node => [...node.childNodes].map(child => {
+			if (child.nodeType === Node.TEXT_NODE) {
+				return child.textContent;
+			}
+			return child.tagName === 'IMG' ? child.alt : child.nodeType === Node.ELEMENT_NODE ? readText(child) : '';
+		}).join('');
 		function checkMessages() {
 			const rows = [...document.querySelectorAll('[role="row"]')].filter(row => row.querySelector('a[href*="/t/"]'));
 			if (!listShown && rows.length) {
@@ -512,7 +518,13 @@
 			rows.forEach((row, index) => {
 				const href = row.querySelector('a[href*="/t/"]').getAttribute('href');
 				const spans = [...row.querySelectorAll('span')].filter(span => !span.children.length && span.textContent.trim());
-				const [name, text] = spans.map(span => span.textContent.trim());
+				// Najbardziej zewnętrzne spany (bez tych z blokami, np. czas przy awatarze): emoji w nazwie albo podglądzie to
+				// zagnieżdżone obrazki, więc ich alt trzeba doliczyć do tekstu. Sama kropka to brak podglądu.
+				const [name, preview] = [...row.querySelectorAll('span')]
+					.filter(span => !span.parentElement.closest('span') && !span.querySelector('div'))
+					.map(span => readText(span).trim())
+					.filter(Boolean);
+				const text = /^[·\s]*$/.test(preview ?? '') ? '' : preview;
 				const known = previews.has(href);
 				const changed = known ? previews.get(href) !== text : index === 0 && previews.size > 0;
 				previews.set(href, text);
