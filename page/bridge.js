@@ -6,7 +6,7 @@
 	}
 
 	const invoke = (command, args) => window.__TAURI_INTERNALS__.invoke(command, args);
-	const listeners = {'settings-changed': [], 'update-ready': [], 'back-to-list': [], 'edge-state': [], 'upload-progress': []};
+	const listeners = {'settings-changed': [], 'update-ready': [], 'back-to-list': [], 'edge-state': [], 'upload-progress': [], 'open-chat': []};
 
 	// Messy wywołuje to przez eval, gdy zmieni się ustawienie albo stan aktualizacji.
 	window.__messyEmit = (name, value) => {
@@ -23,6 +23,8 @@
 		setSetting: (key, value) => invoke('set_setting', {key, value}),
 		// mode: 'panel' | 'free' | 'window' | 'edge' (src-tauri/src/main.rs, set_mode).
 		setMode: mode => invoke('set_mode', {mode}),
+		// speed: 'slow' | 'normal' | 'fast'.
+		setHideSpeed: speed => invoke('set_hide_speed_from_page', {speed}),
 		// Teksty przycisków w języku Windowsa (src-tauri/src/i18n.rs).
 		getStrings: () => invoke('get_strings'),
 		// Wersja gotowej do instalacji aktualizacji albo null, gdy jej nie ma.
@@ -41,6 +43,10 @@
 		onSettingsChange: callback => listeners['settings-changed'].push(callback),
 		// Okno było długo schowane w rozmowie (src-tauri/src/main.rs, show_window).
 		onBackToList: callback => listeners['back-to-list'].push(callback),
+		// Nowa wiadomość: {href, name, text, avatar}; Messy pokazuje dymek, gdy okna nie widać (src-tauri/src/toast.rs).
+		notifyMessage: message => void invoke('notify_message', {message}),
+		// Klik w dymek: href rozmowy do otwarcia.
+		onOpenChat: callback => listeners['open-chat'].push(callback),
 		// Plik ponad limit Messengera idzie do Gofile (src-tauri/src/upload.rs); zwraca link do pobrania.
 		// Plik idzie do Messy kawałkami po 2 MB w base64, potem jedno polecenie go wysyła.
 		uploadFile: async file => {

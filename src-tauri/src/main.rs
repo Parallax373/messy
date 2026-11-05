@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod i18n;
+mod toast;
 mod updater;
 mod upload;
 
@@ -34,8 +35,6 @@ const BACK_TO_LIST_AFTER: Duration = Duration::from_secs(10 * 60);
 const EDGE_STRIP: f64 = 16.0;
 // Długość zakładki wzdłuż krawędzi w pikselach logicznych (#messy-edge-strip w page/style.css).
 const EDGE_TAB_LENGTH: f64 = 150.0;
-// Tak długo kursor musi być poza oknem, zanim schowa się przy krawędzi.
-const EDGE_HIDE_DELAY: Duration = Duration::from_millis(600);
 
 // Przy nieprzeczytanych dymek w ikonie robi się czerwony (assets/icon-unread.svg).
 const ICON_NORMAL: &[u8] = include_bytes!("../../assets/IconTray@2x.png");
@@ -80,13 +79,46 @@ struct Settings {
 	edge_mode: bool,
 	// Bez przycisku rozmowy wideo w nagłówku rozmowy.
 	hide_video_call: bool,
+	// Dymki Messy (src/toast.rs); wyłączone: zwykłe powiadomienia Windowsa jak w trybie okna.
+	toasts: bool,
 	// Pliki ponad limit Messengera idą do Gofile bez pytania (page/inject.js, „Nie pytaj więcej”).
 	auto_upload: bool,
+	// Jak szybko okno przy krawędzi chowa się po zjechaniu kursora i jak długo widać dymki (src/toast.rs).
+	hide_speed: HideSpeed,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+enum HideSpeed {
+	Slow,
+	#[default]
+	Normal,
+	Fast,
+}
+
+impl HideSpeed {
+	// Tyle kursor musi być poza wysuniętym oknem przy krawędzi, zanim się schowa.
+	fn edge_delay(self) -> Duration {
+		Duration::from_millis(match self {
+			HideSpeed::Slow => 1500,
+			HideSpeed::Normal => 600,
+			HideSpeed::Fast => 250,
+		})
+	}
+
+	// Tyle milisekund dymek wisi na ekranie, zanim zacznie znikać.
+	fn toast_lifetime(self) -> u32 {
+		match self {
+			HideSpeed::Slow => 10_000,
+			HideSpeed::Normal => 5_000,
+			HideSpeed::Fast => 3_000,
+		}
+	}
 }
 
 impl Default for Settings {
 	fn default() -> Self {
-		Settings { muted: false, light: false, oled: false, pinned: false, translucent: true, window_mode: false, edge_mode: false, hide_video_call: false, auto_upload: false }
+		Settings { muted: false, light: false, oled: false, pinned: false, translucent: true, window_mode: false, edge_mode: false, hide_video_call: false, toasts: true, auto_upload: false, hide_speed: HideSpeed::Normal }
 	}
 }
 
@@ -115,8 +147,10 @@ struct AppState {
 	drag_origin: Mutex<Option<PhysicalPosition<i32>>>,
 	// Tryb krawędzi: okno jest wysunięte (true) albo schowane do paska (false).
 	edge_expanded: Mutex<bool>,
-	// Od kiedy kursor jest poza wysuniętym oknem; po EDGE_HIDE_DELAY okno się chowa.
+	// Od kiedy kursor jest poza wysuniętym oknem; po HideSpeed::edge_delay okno się chowa.
 	edge_leave_at: Mutex<Option<Instant>>,
+	// Okno wysunięte kliknięciem w dymek (kursor jest wtedy obok okna): nie chowa się, dopóki kursor nie wjedzie na nie.
+	edge_hold: Mutex<bool>,
 	// Strona ma fokus w polu tekstowym; wtedy okno się nie chowa.
 	page_typing: Mutex<bool>,
 	// Numer ostatniej animacji; nowsza przerywa starszą.
@@ -198,6 +232,7 @@ fn set_setting_value(app: &AppHandle, key: &str, value: bool) {
 				}
 			}
 			"hide_video_call" => settings.hide_video_call = value,
+			"toasts" => settings.toasts = value,
 			"auto_upload" => settings.auto_upload = value,
 			_ => return,
 		}
@@ -253,6 +288,25 @@ fn set_mode_value(app: &AppHandle, mode: &str) {
 	build_tray_menu(app);
 	// show_window ustawia okno według trybu i je pokazuje (przy krawędzi wysunięte).
 	show_window(app);
+}
+
+// Menu trybów na stronie (przy trybie krawędzi): speed to 'slow' | 'normal' | 'fast'.
+#[tauri::command]
+fn set_hide_speed_from_page(app: AppHandle, speed: HideSpeed) {
+	set_hide_speed(&app, speed);
+}
+
+// Menu ikony, „Chowanie okna i dymków”. Klik w zaznaczoną pozycję zostawia ją zaznaczoną (menu budujemy od nowa).
+fn set_hide_speed(app: &AppHandle, speed: HideSpeed) {
+	let state = state(app);
+	let settings = {
+		let mut settings = state.settings.lock().unwrap();
+		settings.hide_speed = speed;
+		*settings
+	};
+	write_json(app, "settings.json", &settings);
+	emit_to_page(app, "settings-changed", settings);
+	build_tray_menu(app);
 }
 
 #[tauri::command]
@@ -448,12 +502,18 @@ fn set_edge_expanded(app: &AppHandle, window: &WebviewWindow, expanded: bool) {
 	let st = state(app);
 	*st.edge_expanded.lock().unwrap() = expanded;
 	*st.edge_leave_at.lock().unwrap() = None;
+	if !expanded {
+		*st.edge_hold.lock().unwrap() = false;
+	}
 	let saved = read_json::<EdgeDock>(app, "edge-dock.json");
 	if let (Some(monitor), Ok(size)) = (dock_monitor(window, saved.as_ref()), window.outer_size()) {
 		slide_to(app, edge_target(saved.as_ref(), &monitor, size, expanded));
 	}
 	// Strona przenika się z zakładką w trakcie ruchu (page/style.css), więc dostaje stan od razu.
 	emit_edge_state(app);
+	if expanded {
+		toast::clear(app);
+	}
 }
 
 // Czy po drugiej stronie danej krawędzi monitora stoi inny monitor (okno wjeżdżałoby na jego ekran).
@@ -577,12 +637,15 @@ fn edge_tick(app: &AppHandle) {
 	}
 	// Wciśnięty przycisk myszy poza oknem to zwykle przeciąganie (plik z Eksploratora, tekst, zdjęcie):
 	// okno czeka wysunięte, żeby było gdzie to upuścić.
-	if inside || mouse_button_down() {
+	if inside {
+		*st.edge_hold.lock().unwrap() = false;
+	}
+	if inside || mouse_button_down() || *st.edge_hold.lock().unwrap() {
 		*st.edge_leave_at.lock().unwrap() = None;
 		return;
 	}
 	let left_at = *st.edge_leave_at.lock().unwrap().get_or_insert_with(Instant::now);
-	if left_at.elapsed() > EDGE_HIDE_DELAY && !*st.page_typing.lock().unwrap() {
+	if left_at.elapsed() > st.settings.lock().unwrap().hide_speed.edge_delay() && !*st.page_typing.lock().unwrap() {
 		set_edge_expanded(app, &window, false);
 	}
 }
@@ -722,6 +785,20 @@ fn set_unread(app: AppHandle, count: u32) {
 	update_tooltip(&app);
 }
 
+// Nowa wiadomość na liście czatów (page/inject.js); dymek, jeśli okna nie widać (src/toast.rs).
+#[tauri::command]
+fn notify_message(app: AppHandle, message: toast::Message) {
+	toast::show(&app, message);
+}
+
+// Klik w dymek: okno z tą rozmową. Bez powrotu do listy po długim schowaniu, bo strona i tak przechodzi do rozmowy.
+fn open_chat(app: &AppHandle, href: &str) {
+	state(app).hidden_at.lock().unwrap().take();
+	*state(app).edge_hold.lock().unwrap() = true;
+	show_window(app);
+	emit_to_page(app, "open-chat", href);
+}
+
 fn update_tooltip(app: &AppHandle) {
 	let Some(tray) = app.tray_by_id(TRAY_ID) else {
 		return;
@@ -773,6 +850,11 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		&CheckMenuItem::with_id(app, "mode_edge", page.mode_edge, true, mode == "edge", None::<&str>)?,
 		&PredefinedMenuItem::separator(app)?,
 		&CheckMenuItem::with_id(app, "translucent", strings.translucent, mode == "free", settings.translucent, None::<&str>)?,
+		&Submenu::with_items(app, strings.hide_speed_menu, true, &[
+			&CheckMenuItem::with_id(app, "hide_slow", page.hide_slow, true, settings.hide_speed == HideSpeed::Slow, None::<&str>)?,
+			&CheckMenuItem::with_id(app, "hide_normal", page.hide_normal, true, settings.hide_speed == HideSpeed::Normal, None::<&str>)?,
+			&CheckMenuItem::with_id(app, "hide_fast", page.hide_fast, true, settings.hide_speed == HideSpeed::Fast, None::<&str>)?,
+		])?,
 	])?;
 	// Podmenu „Wygląd”: kolory i przyciski na stronie.
 	let look_menu = Submenu::with_items(app, strings.look_menu, true, &[
@@ -786,11 +868,17 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 		Box::new(PredefinedMenuItem::separator(app)?),
 		Box::new(MenuItem::with_id(app, "show", strings.show, true, None::<&str>)?),
 		Box::new(PredefinedMenuItem::separator(app)?),
-		Box::new(CheckMenuItem::with_id(app, "muted", strings.mute, true, settings.muted, None::<&str>)?),
-		Box::new(CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?),
-		Box::new(CheckMenuItem::with_id(app, "auto_upload", strings.auto_upload, true, settings.auto_upload, None::<&str>)?),
+		// Wszystkie ustawienia w podmenu, bez luźnych przełączników między nimi.
 		Box::new(window_menu),
 		Box::new(look_menu),
+		Box::new(Submenu::with_items(app, strings.notifications_menu, true, &[
+			&CheckMenuItem::with_id(app, "muted", strings.mute, true, settings.muted, None::<&str>)?,
+			&CheckMenuItem::with_id(app, "toasts", strings.toasts, !settings.muted, settings.toasts, None::<&str>)?,
+		])?),
+		Box::new(Submenu::with_items(app, strings.general_menu, true, &[
+			&CheckMenuItem::with_id(app, "autostart", strings.autostart, packaged, autostart, None::<&str>)?,
+			&CheckMenuItem::with_id(app, "auto_upload", strings.auto_upload, true, settings.auto_upload, None::<&str>)?,
+		])?),
 		Box::new(PredefinedMenuItem::separator(app)?),
 	];
 	// Narzędzia deweloperskie tylko w wersji deweloperskiej; w wydaniu nikt ich nie potrzebuje.
@@ -817,6 +905,10 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 		id if id.starts_with("mode_") => set_mode_value(app, &id["mode_".len()..]),
 		"hide_video_call" => set_setting_value(app, "hide_video_call", !settings.hide_video_call),
 		"auto_upload" => set_setting_value(app, "auto_upload", !settings.auto_upload),
+		"toasts" => set_setting_value(app, "toasts", !settings.toasts),
+		"hide_slow" => set_hide_speed(app, HideSpeed::Slow),
+		"hide_normal" => set_hide_speed(app, HideSpeed::Normal),
+		"hide_fast" => set_hide_speed(app, HideSpeed::Fast),
 		"autostart" => {
 			let autolaunch = app.autolaunch();
 			let _ = if autolaunch.is_enabled().unwrap_or(false) { autolaunch.disable() } else { autolaunch.enable() };
@@ -924,6 +1016,7 @@ fn show_window(app: &AppHandle) {
 	let _ = window.show();
 	let _ = window.unminimize();
 	let _ = window.set_focus();
+	toast::clear(app);
 }
 
 // Pokazuje okno bez aktywacji: przy starcie (też z Windowsem) Messy nie zabiera fokusu temu, w czym się pracuje.
@@ -1191,7 +1284,7 @@ fn main() {
 		.plugin(tauri_plugin_notification::init())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_updater::Builder::new().build())
-		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window, set_typing, upload::upload_chunk, upload::upload_file, upload::upload_cancel, set_mode])
+		.invoke_handler(tauri::generate_handler![get_settings, set_setting, get_strings, get_update_ready, install_update, set_unread, set_fullscreen, drag_window, hide_window, set_typing, upload::upload_chunk, upload::upload_file, upload::upload_cancel, set_mode, notify_message, set_hide_speed_from_page])
 		.on_window_event(on_window_event)
 		.setup(|app| {
 			let handle = app.handle();
@@ -1208,6 +1301,7 @@ fn main() {
 				drag_origin: Mutex::new(None),
 				edge_expanded: Mutex::new(false),
 				edge_leave_at: Mutex::new(None),
+				edge_hold: Mutex::new(false),
 				page_typing: Mutex::new(false),
 				slide_generation: AtomicU64::new(0),
 				show_when_page_ready: AtomicBool::new(false),
@@ -1222,6 +1316,7 @@ fn main() {
 			}
 
 			let window = create_window(handle)?;
+			toast::create(handle)?;
 			// Tryb krawędzi: od startu (też z Windowsem) zakładka czeka przy krawędzi, schowana i bez fokusu.
 			let edge_mode = state(handle).settings.lock().unwrap().edge_mode;
 			if edge_mode {

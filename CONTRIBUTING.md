@@ -27,9 +27,12 @@ Force the English UI: `$env:MESSY_LANG="en"; npm start`.
 - `src-tauri/src/main.rs`: window, tray, settings, page permissions, the commands the page calls
 - `src-tauri/src/i18n.rs`: Polish and English UI strings
 - `src-tauri/src/updater.rs`: checking, downloading and installing updates from GitHub
+- `src-tauri/src/toast.rs`: new-message toasts next to the tray or the edge tab while the window is hidden
 - `src-tauri/capabilities/messenger.json`: which commands facebook.com may call
 - `page/bridge.js`: `window.messy` in the page, on top of Tauri IPC
-- `page/inject.js`: script running in the page, buttons in the Chats header, unread count, muting `Notification`
+- `page/inject.js`: script running in the page, buttons in the Chats header, unread count, new messages for toasts,
+  muting `Notification`
+- `page/toast.html`: the toast window (a `data:` page without Tauri IPC; it talks to Rust through its title)
 - `page/style.css`: CSS injected into the page (hidden top bar, scrollbars, OLED mode)
 - `assets/icon.svg`, `assets/icon-unread.svg`: icon sources; `npm run icons` renders the PNGs and
   `src-tauri/icons`
